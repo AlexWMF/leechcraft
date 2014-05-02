@@ -29,22 +29,25 @@
 
 #pragma once
 
-#include <QList>
-#include "notificationdata.h"
+#include <interfaces/iinfo.h>
 
 
 namespace LeechCraft
 {
-namespace AdvancedNotifications
+namespace Pierre
 {
-namespace Dolle
-{
-namespace DU
-{
-	bool SetDockBadges (const QList<NotificationData>& badges);
 
-	void InstallBadgeView ();
-}
-}
+class ReopenHandler
+{
+	ICoreProxy_ptr Proxy_;
+
+	ReopenHandler ();
+public:
+	static ReopenHandler& Instance ();
+
+	void SetCoreProxy (const ICoreProxy_ptr&);
+	void Triggered ();
+};
+
 }
 }
