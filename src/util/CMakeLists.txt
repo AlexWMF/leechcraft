@@ -32,6 +32,9 @@ include_directories (${Boost_INCLUDE_DIRS}
 	${QWT_INCLUDE_DIRS}
 	..)
 
+add_subdirectory (models)
+add_subdirectory (network)
+
 set (SRCS
 	gui/autoresizemixin.cpp
 	gui/clearlineeditaddon.cpp
@@ -44,18 +47,6 @@ set (SRCS
 	gui/selectablebrowser.cpp
 	gui/unhoverdeletemixin.cpp
 	gui/util.cpp
-	models/flattenfiltermodel.cpp
-	models/flattofoldersproxymodel.cpp
-	models/listmodel.cpp
-	models/mergemodel.cpp
-	models/modeliterator.cpp
-	models/modelitem.cpp
-	models/treeitem.cpp
-	network/addressesmodelmanager.cpp
-	network/customcookiejar.cpp
-	network/customnetworkreply.cpp
-	network/networkdiskcache.cpp
-	network/socketerrorstrings.cpp
 	qml/colorthemeproxy.cpp
 	qml/settableiconprovider.cpp
 	qml/standardnamfactory.cpp
@@ -152,7 +143,7 @@ target_link_libraries (leechcraft-util
 	${ADDITIONAL_LIBS}
 	leechcraft-xsd
 	)
-set_property (TARGET leechcraft-util PROPERTY SOVERSION 0.5.0)
+set_property (TARGET leechcraft-util PROPERTY SOVERSION 0.6.65)
 install (TARGETS leechcraft-util DESTINATION ${LIBDIR})
 
 if (USE_QT5)
