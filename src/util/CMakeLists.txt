@@ -8,32 +8,25 @@ if (NOT USE_QT5)
 endif ()
 
 set (CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-find_package (MAGIC)
-if (MAGIC_FOUND)
-	add_definitions (-DHAVE_MAGIC)
-else ()
-	set (MAGIC_INCLUDE_DIRS)
-	set (MAGIC_LIBRARIES)
-endif ()
 
 option (WITH_X11 "Enable X11 support on Linux" ON)
 option (WITH_QWT "Enable support for Qwt (for QML PlotItem, for example)" ON)
 
-if (WITH_QWT)
-	find_package (Qwt REQUIRED)
-	set (ADDITIONAL_LIBS ${ADDITIONAL_LIBS} ${QWT_LIBRARIES})
-	add_definitions (-DWITH_QWT)
-endif ()
-
 include_directories (${Boost_INCLUDE_DIRS}
 	${CMAKE_CURRENT_BINARY_DIR}
 	${CMAKE_CURRENT_SOURCE_DIR}
-	${MAGIC_INCLUDE_DIRS}
 	${QWT_INCLUDE_DIRS}
 	..)
 
 add_subdirectory (models)
 add_subdirectory (network)
+add_subdirectory (qml)
+add_subdirectory (shortcuts)
+add_subdirectory (sll)
+add_subdirectory (svcauth)
+add_subdirectory (sys)
+add_subdirectory (tags)
+add_subdirectory (xdg)
 
 set (SRCS
 	gui/autoresizemixin.cpp
@@ -47,32 +40,6 @@ set (SRCS
 	gui/selectablebrowser.cpp
 	gui/unhoverdeletemixin.cpp
 	gui/util.cpp
-	qml/colorthemeproxy.cpp
-	qml/settableiconprovider.cpp
-	qml/standardnamfactory.cpp
-	qml/themeimageprovider.cpp
-	qml/tooltipitem.cpp
-	qml/unhidelistmodel.cpp
-	qml/unhidelistviewbase.cpp
-	qml/widthiconprovider.cpp
-	sll/onetimerunner.cpp
-	sll/slotclosure.cpp
-	svcauth/vkauthmanager.cpp
-	svcauth/vkcaptchadialog.cpp
-	sys/mimedetector.cpp
-	sys/paths.cpp
-	sys/sysinfo.cpp
-	xdg/desktopparser.cpp
-	xdg/item.cpp
-	xdg/itemsdatabase.cpp
-	xdg/itemsfinder.cpp
-	xdg/itemtypes.cpp
-	xdg/xdg.cpp
-	tags/categoryselector.cpp
-	tags/tagscompleter.cpp
-	tags/tagscompletionmodel.cpp
-	tags/tagslineedit.cpp
-	tags/tagsfiltermodel.cpp
 	xpc/basehookinterconnector.cpp
 	xpc/defaulthookproxy.cpp
 	xpc/notificationactionhandler.cpp
@@ -85,17 +52,11 @@ set (SRCS
 	dblock.cpp
 	backendselector.cpp
 	structuresops.cpp
-	fileremoveguard.cpp
 	exceptions.cpp
-	resourceloader.cpp
-	queuemanager.cpp
-	delayedexecutor.cpp
-	shortcuts/shortcutmanager.cpp
 	)
 set (FORMS
 	backendselector.ui
 	gui/findnotification.ui
-	svcauth/vkcaptchadialog.ui
 	)
 if (USE_QT5)
 	qt5_wrap_ui (UIS_H ${FORMS})
@@ -112,10 +73,6 @@ if (WITH_X11 AND NOT APPLE)
 
 		set (SRCS ${SRCS} x11/xwrapper.cpp)
 	endif ()
-endif ()
-
-if (WITH_QWT)
-	set (SRCS ${SRCS} qml/plotitem.cpp)
 endif ()
 
 foreach (SRC ${SRCS})
@@ -139,7 +96,6 @@ add_library (leechcraft-util SHARED
 	)
 target_link_libraries (leechcraft-util
 	${QT_LIBRARIES}
-	${MAGIC_LIBRARIES}
 	${ADDITIONAL_LIBS}
 	leechcraft-xsd
 	)
@@ -147,5 +103,5 @@ set_property (TARGET leechcraft-util PROPERTY SOVERSION 0.6.65)
 install (TARGETS leechcraft-util DESTINATION ${LIBDIR})
 
 if (USE_QT5)
-	QT5_USE_MODULES (leechcraft-util Declarative Network Xml Sql Widgets)
+	QT5_USE_MODULES (leechcraft-util Xml Sql Widgets)
 endif ()
