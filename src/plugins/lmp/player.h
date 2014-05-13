@@ -117,7 +117,8 @@ namespace LMP
 			Info,
 			AlbumArt,
 			AlbumLength,
-			OneShotPos
+			OneShotPos,
+			MatchingRules
 		};
 
 		enum EnqueueFlag
@@ -181,7 +182,7 @@ namespace LMP
 
 		void UnsetRadio ();
 
-		void EmitStateChange ();
+		void EmitStateChange (SourceState);
 
 		template<typename T>
 		AudioSource GetRandomBy (QList<AudioSource>::const_iterator,

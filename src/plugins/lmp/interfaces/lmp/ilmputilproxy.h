@@ -29,35 +29,48 @@
 
 #pragma once
 
-#include <QObject>
-#include <interfaces/iinfo.h>
+#include <functional>
+#include <atomic>
+#include <QtPlugin>
+#include <QFileInfo>
+#include <QMap>
+#include <QVariant>
 
-class QDBusInterface;
+class QPixmap;
 
 namespace LeechCraft
 {
-namespace Loaders
+namespace LMP
 {
-	class DBusWrapper : public QObject
-					  , public IInfo
+	struct MediaInfo;
+
+	enum SubstitutionFlag
 	{
-		Q_OBJECT
-		Q_INTERFACES (IInfo)
+		SFNone,
+		SFSafeFilesystem
+	};
+	Q_DECLARE_FLAGS (SubstitutionFlags, SubstitutionFlag);
 
-		const QString Service_;
-		std::shared_ptr<QDBusInterface> IFace_;
-
-		std::shared_ptr<QDBusInterface> Info_;
+	class ILMPUtilProxy
+	{
 	public:
-		explicit DBusWrapper (const QString& service);
+		virtual ~ILMPUtilProxy () {}
 
-		void Init (ICoreProxy_ptr proxy);
-		void SecondInit ();
-		void Release ();
-		QByteArray GetUniqueID () const;
-		QString GetName () const;
-		QString GetInfo () const;
-		QIcon GetIcon () const;
+		virtual QString FindAlbumArt (const QString& near, bool includeCollection = true) const = 0;
+
+		virtual QList<QFileInfo> RecIterateInfo (const QString& dirPath,
+				bool followSymlinks = false,
+				std::atomic<bool> *stopGuard = nullptr) const = 0;
+
+		virtual QMap<QString, std::function<QString (MediaInfo)>> GetSubstGetters () const = 0;
+
+		virtual QMap<QString, std::function<void (MediaInfo&, QString)>> GetSubstSetters () const = 0;
+
+		virtual QString PerformSubstitutions (QString mask,
+				const MediaInfo& info, SubstitutionFlags flags = SFNone) const = 0;
 	};
 }
 }
+
+Q_DECLARE_OPERATORS_FOR_FLAGS (LeechCraft::LMP::SubstitutionFlags)
+Q_DECLARE_INTERFACE (LeechCraft::LMP::ILMPUtilProxy, "org.LeechCraft.LMP.ILMPUtilProxy/1.0");

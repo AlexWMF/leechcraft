@@ -27,57 +27,12 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#include "dbuswrapper.h"
-#include <QDBusInterface>
-#include <QDBusReply>
-#include <interfaces/core/icoreproxy.h>
+#pragma once
 
-namespace LeechCraft
-{
-namespace Loaders
-{
-	DBusWrapper::DBusWrapper (const QString& service)
-	: Service_ { service }
-	, IFace_ { new QDBusInterface { service, "/org/LeechCraft/Plugin" } }
-	, Info_ { new QDBusInterface { service, "/org/LeechCraft/Info" } }
-	{
-	}
+#include <QtGlobal>
 
-	void DBusWrapper::Init (ICoreProxy_ptr proxy)
-	{
-		qDebug () << Q_FUNC_INFO;
-		Info_->call ("Init", QVariant::fromValue (proxy));
-		qDebug () << "done";
-	}
-
-	void DBusWrapper::SecondInit ()
-	{
-		Info_->call ("SecondInit");
-	}
-
-	void DBusWrapper::Release ()
-	{
-		Info_->call ("Release");
-	}
-
-	QByteArray DBusWrapper::GetUniqueID () const
-	{
-		return QDBusReply<QByteArray> (Info_->call ("GetUniqueID")).value ();
-	}
-
-	QString DBusWrapper::GetName () const
-	{
-		return QDBusReply<QString> (Info_->call ("GetName")).value ();
-	}
-
-	QString DBusWrapper::GetInfo () const
-	{
-		return QDBusReply<QString> (Info_->call ("GetInfo")).value ();
-	}
-
-	QIcon DBusWrapper::GetIcon () const
-	{
-		return QDBusReply<QIcon> (Info_->call ("GetIcon")).value ();
-	}
-}
-}
+#if defined(leechcraft_util_db_EXPORTS)
+#  define UTIL_DB_API Q_DECL_EXPORT
+#else
+#  define UTIL_DB_API Q_DECL_IMPORT
+#endif

@@ -15,9 +15,10 @@ option (WITH_QWT "Enable support for Qwt (for QML PlotItem, for example)" ON)
 include_directories (${Boost_INCLUDE_DIRS}
 	${CMAKE_CURRENT_BINARY_DIR}
 	${CMAKE_CURRENT_SOURCE_DIR}
-	${QWT_INCLUDE_DIRS}
 	..)
 
+add_subdirectory (db)
+add_subdirectory (gui)
 add_subdirectory (models)
 add_subdirectory (network)
 add_subdirectory (qml)
@@ -27,53 +28,39 @@ add_subdirectory (svcauth)
 add_subdirectory (sys)
 add_subdirectory (tags)
 add_subdirectory (xdg)
+add_subdirectory (xpc)
+add_subdirectory (xsd)
+
+if (WITH_X11 AND NOT APPLE)
+	add_subdirectory (x11)
+	set (LEECHCRAFT_UTIL_LIBRARIES leechcraft-util-x11)
+endif ()
+
+set (LEECHCRAFT_UTIL_LIBRARIES
+	${LEECHCRAFT_UTIL_LIBRARIES}
+	leechcraft-util
+	leechcraft-util-db
+	leechcraft-util-gui
+	leechcraft-util-models
+	leechcraft-util-network
+	leechcraft-util-qml
+	leechcraft-util-shortcuts
+	leechcraft-util-sll
+	leechcraft-util-svcauth
+	leechcraft-util-sys
+	leechcraft-util-tags
+	leechcraft-util-xdg
+	leechcraft-util-xpc
+	leechcraft-util-xsd
+	)
+
+set (LEECHCRAFT_UTIL_LIBRARIES ${LEECHCRAFT_UTIL_LIBRARIES} PARENT_SCOPE)
 
 set (SRCS
-	gui/autoresizemixin.cpp
-	gui/clearlineeditaddon.cpp
-	gui/colorbutton.cpp
-	gui/findnotification.cpp
-	gui/findnotificationwk.cpp
-	gui/flowlayout.cpp
-	gui/lineeditbuttonmanager.cpp
-	gui/pagenotification.cpp
-	gui/selectablebrowser.cpp
-	gui/unhoverdeletemixin.cpp
-	gui/util.cpp
-	xpc/basehookinterconnector.cpp
-	xpc/defaulthookproxy.cpp
-	xpc/notificationactionhandler.cpp
-	xpc/passutils.cpp
-	xpc/stdanfields.cpp
-	xpc/stddatafiltermenucreator.cpp
-	xpc/util.cpp
-	xsd/util.cpp
 	util.cpp
-	dblock.cpp
-	backendselector.cpp
 	structuresops.cpp
 	exceptions.cpp
 	)
-set (FORMS
-	backendselector.ui
-	gui/findnotification.ui
-	)
-if (USE_QT5)
-	qt5_wrap_ui (UIS_H ${FORMS})
-else ()
-	QT4_WRAP_UI (UIS_H ${FORMS})
-endif ()
-
-if (WITH_X11 AND NOT APPLE)
-	find_package (X11)
-
-	if (X11_FOUND)
-		add_definitions (-DHAVE_X11)
-		set (ADDITIONAL_LIBS ${ADDITIONAL_LIBS} ${X11_X11_LIB})
-
-		set (SRCS ${SRCS} x11/xwrapper.cpp)
-	endif ()
-endif ()
 
 foreach (SRC ${SRCS})
 	set (UTIL_SRCS "${UTIL_SRCS};util/${SRC}")
@@ -92,12 +79,10 @@ add_definitions(-DQT_GUI_LIB)
 
 add_library (leechcraft-util SHARED
 	${SRCS}
-	${UIS_H}
 	)
 target_link_libraries (leechcraft-util
 	${QT_LIBRARIES}
 	${ADDITIONAL_LIBS}
-	leechcraft-xsd
 	)
 set_property (TARGET leechcraft-util PROPERTY SOVERSION 0.6.65)
 install (TARGETS leechcraft-util DESTINATION ${LIBDIR})

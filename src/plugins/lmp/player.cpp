@@ -40,6 +40,8 @@
 #include <util/xpc/util.h>
 #include <util/sll/delayedexecutor.h>
 #include <interfaces/core/ientitymanager.h>
+#include <interfaces/core/ipluginsmanager.h>
+#include <interfaces/an/ianrulesstorage.h>
 #include "core.h"
 #include "mediainfo.h"
 #include "localfileresolver.h"
@@ -55,6 +57,8 @@
 #include "engine/output.h"
 #include "engine/path.h"
 #include "localcollectionmodel.h"
+
+Q_DECLARE_METATYPE (QList<LeechCraft::Entity>)
 
 namespace LeechCraft
 {
@@ -623,29 +627,6 @@ namespace LMP
 
 	namespace
 	{
-		void FillItem (QStandardItem *item, const MediaInfo& info)
-		{
-			QString text;
-			if (!info.IsUseless ())
-			{
-				text = XmlSettingsManager::Instance ()
-						.property ("SingleTrackDisplayMask").toString ();
-
-				text = PerformSubstitutions (text, info).simplified ();
-				text.replace ("- -", "-");
-				if (text.startsWith ("- "))
-					text = text.mid (2);
-				if (text.endsWith (" -"))
-					text.chop (2);
-			}
-			else
-				text = QFileInfo (info.LocalPath_).fileName ();
-
-			item->setText (text);
-
-			item->setData (QVariant::fromValue (info), Player::Role::Info);
-		}
-
 		QStandardItem* MakeAlbumItem (const MediaInfo& info)
 		{
 			auto albumItem = new QStandardItem (QString ("%1 - %2")
@@ -663,10 +644,7 @@ namespace LMP
 			albumItem->setData (0, Player::Role::AlbumLength);
 			return albumItem;
 		}
-	}
 
-	namespace
-	{
 		QPair<AudioSource, MediaInfo> PairResolve (const AudioSource& source)
 		{
 			MediaInfo info;
@@ -812,11 +790,11 @@ namespace LMP
 		CurrentStation_.reset ();
 	}
 
-	void Player::EmitStateChange ()
+	void Player::EmitStateChange (SourceState state)
 	{
 		QString stateStr;
 		QString hrStateStr;
-		switch (Source_->GetState ())
+		switch (state)
 		{
 		case SourceState::Paused:
 			stateStr = "Paused";
@@ -1126,6 +1104,102 @@ namespace LMP
 		emit playerAvailable (true);
 	}
 
+	namespace
+	{
+		QList<Entity> GetRelevantRules ()
+		{
+			const auto plugMgr = Core::Instance ().GetProxy ()->GetPluginsManager ();
+
+			QList<Entity> result;
+			for (auto storage : plugMgr->GetAllCastableTo<IANRulesStorage*> ())
+				result += storage->GetAllRules (AN::CatMediaPlayer);
+			return result;
+		}
+
+		bool MatchesRule (const MediaInfo& info, const Entity& rule)
+		{
+			auto url = info.Additional_.value ("URL").toUrl ();
+			if (url.isEmpty ())
+				url = QUrl::fromLocalFile (info.LocalPath_);
+
+			const QList<QPair<QString, ANFieldValue>> fields
+			{
+				{
+					AN::Field::MediaArtist,
+					ANStringFieldValue { info.Artist_ }
+				},
+				{
+					AN::Field::MediaAlbum,
+					ANStringFieldValue { info.Album_ }
+				},
+				{
+					AN::Field::MediaTitle,
+					ANStringFieldValue { info.Title_ }
+				},
+				{
+					AN::Field::MediaLength,
+					ANIntFieldValue { info.Length_, ANIntFieldValue::OEqual }
+				},
+				{
+					AN::Field::MediaPlayerURL,
+					ANStringFieldValue { url.toEncoded () }
+				}
+			};
+
+			const auto& map = rule.Additional_;
+			bool hadAtLeastOne = false;
+			for (const auto& field : fields)
+			{
+				if (!map.contains (field.first))
+					continue;
+
+				hadAtLeastOne = true;
+
+				const auto& value = map.value (field.first).value<ANFieldValue> ();
+				if (!(value == field.second))
+					return false;
+			}
+
+			return hadAtLeastOne;
+		}
+
+		QList<Entity> FindMatching (const MediaInfo& info, const QList<Entity>& rules)
+		{
+			QList<Entity> result;
+			for (const auto& rule : rules)
+				if (MatchesRule (info, rule))
+					result << rule;
+			return result;
+		}
+
+		void FillItem (QStandardItem *item, const MediaInfo& info, const QList<Entity>& rules)
+		{
+			QString text;
+			if (!info.IsUseless ())
+			{
+				text = XmlSettingsManager::Instance ()
+						.property ("SingleTrackDisplayMask").toString ();
+
+				text = PerformSubstitutions (text, info).simplified ();
+				text.replace ("- -", "-");
+				if (text.startsWith ("- "))
+					text = text.mid (2);
+				if (text.endsWith (" -"))
+					text.chop (2);
+			}
+			else
+				text = QFileInfo (info.LocalPath_).fileName ();
+
+			item->setText (text);
+
+			item->setData (QVariant::fromValue (info), Player::Role::Info);
+
+			const auto& matching = FindMatching (info, rules);
+			item->setData (matching.isEmpty () ? QVariant {} : QVariant::fromValue (matching),
+					Player::Role::MatchingRules);
+		}
+	}
+
 	void Player::continueAfterSorted (const QList<QPair<AudioSource, MediaInfo>>& sources)
 	{
 		CurrentQueue_.clear ();
@@ -1134,6 +1208,8 @@ namespace LMP
 		PlaylistModel_->blockSignals (true);
 
 		QString prevAlbumRoot;
+
+		const auto& rules = GetRelevantRules ();
 
 		for (const auto& sourcePair : sources)
 		{
@@ -1164,7 +1240,7 @@ namespace LMP
 					info = Url2Info_ [url];
 
 				if (info)
-					FillItem (item, *info);
+					FillItem (item, *info, rules);
 				else
 					item->setText (url.toString ());
 
@@ -1176,7 +1252,7 @@ namespace LMP
 				const auto& info = sourcePair.second;
 
 				const auto& albumID = info.Album_;
-				FillItem (item, info);
+				FillItem (item, info, rules);
 				if (albumID != prevAlbumRoot ||
 						AlbumRoots_ [albumID].isEmpty ())
 				{
@@ -1357,7 +1433,10 @@ namespace LMP
 		}
 
 		if (!next.IsEmpty ())
+		{
+			EmitStateChange (SourceState::Stopped);
 			Source_->PrepareNextSource (next);
+		}
 	}
 
 	void Player::handlePlaybackFinished ()
@@ -1382,7 +1461,7 @@ namespace LMP
 
 		SavePlayState (false);
 
-		EmitStateChange ();
+		EmitStateChange (state);
 	}
 
 	void Player::handleCurrentSourceChanged (const AudioSource& source)
@@ -1412,7 +1491,7 @@ namespace LMP
 
 		handleMetadata ();
 
-		EmitStateChange ();
+		EmitStateChange (Source_->GetState ());
 	}
 
 	void Player::handleMetadata ()
@@ -1433,13 +1512,13 @@ namespace LMP
 			emit songInfoUpdated (info);
 		else
 		{
-			FillItem (curItem, info);
+			FillItem (curItem, info, {});
 			emit songChanged (info);
 		}
 
 		LastPhononMediaInfo_ = info;
 
-		EmitStateChange ();
+		EmitStateChange (Source_->GetState ());
 	}
 
 	void Player::handleSourceError (const QString& sourceText, SourceError error)

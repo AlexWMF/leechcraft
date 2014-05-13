@@ -34,6 +34,7 @@
 #include <QFileInfo>
 #include <interfaces/media/idiscographyprovider.h>
 #include "interfaces/lmp/ilmpproxy.h"
+#include "interfaces/lmp/ilmputilproxy.h"
 
 class QPixmap;
 class QPoint;
