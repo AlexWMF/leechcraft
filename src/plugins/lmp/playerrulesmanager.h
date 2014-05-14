@@ -29,74 +29,39 @@
 
 #pragma once
 
-#include <memory>
 #include <QObject>
-#include <interfaces/iinfo.h>
-#include <interfaces/ientityhandler.h>
-#include <interfaces/ihavesettings.h>
-#include <interfaces/iactionsexporter.h>
-#include <interfaces/iquarkcomponentprovider.h>
-#include <interfaces/ipluginready.h>
-#include <interfaces/an/ianrulesstorage.h>
+
+class QStandardItemModel;
+class QStandardItem;
+class QModelIndex;
 
 namespace LeechCraft
 {
-namespace AdvancedNotifications
-{
-	class GeneralHandler;
+struct Entity;
 
-	class Plugin : public QObject
-				 , public IInfo
-				 , public IEntityHandler
-				 , public IHaveSettings
-				 , public IActionsExporter
-				 , public IQuarkComponentProvider
-				 , public IPluginReady
-				 , public IANRulesStorage
+namespace LMP
+{
+	class PlayerRulesManager : public QObject
 	{
 		Q_OBJECT
-		Q_INTERFACES (IInfo
-				IEntityHandler
-				IHaveSettings
-				IActionsExporter
-				IQuarkComponentProvider
-				IPluginReady
-				IANRulesStorage)
 
-		ICoreProxy_ptr Proxy_;
-		Util::XmlSettingsDialog_ptr SettingsDialog_;
-		std::shared_ptr<GeneralHandler> GeneralHandler_;
+		QStandardItemModel * const Model_;
 
-		QuarkComponent_ptr Component_;
+		QList<QStandardItem*> ManagedItems_;
+
+		QList<Entity> Rules_;
 	public:
-		void Init (ICoreProxy_ptr);
-		void SecondInit ();
-		QByteArray GetUniqueID () const;
-		void Release ();
-		QString GetName () const;
-		QString GetInfo () const;
-		QIcon GetIcon () const;
+		PlayerRulesManager (QStandardItemModel*, QObject* = 0);
 
-		EntityTestHandleResult CouldHandle (const Entity&) const;
-		void Handle (Entity);
+		void InitializePlugins ();
+	private slots:
+		void insertRows (const QModelIndex&, int, int);
+		void removeRows (const QModelIndex&, int, int);
+		void handleReset ();
 
-		Util::XmlSettingsDialog_ptr GetSettingsDialog () const;
+		void refillRules ();
 
-		QList<QAction*> GetActions (ActionsEmbedPlace) const;
-
-		QuarkComponents_t GetComponents () const;
-
-		QSet<QByteArray> GetExpectedPluginClasses () const;
-		void AddPlugin (QObject*);
-
-		QList<Entity> GetAllRules (const QString&) const;
-		void RequestRuleConfiguration (const Entity&);
-	signals:
-		void gotEntity (const LeechCraft::Entity&);
-
-		void gotActions (QList<QAction*>, LeechCraft::ActionsEmbedPlace);
-
-		void rulesChanged ();
+		void handleRulesChanged ();
 	};
 }
 }
