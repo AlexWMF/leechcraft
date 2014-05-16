@@ -29,45 +29,24 @@
 
 #pragma once
 
-#include <atomic>
-#include <QStringList>
-#include <QFileInfo>
-#include <interfaces/media/idiscographyprovider.h>
-#include "interfaces/lmp/ilmpproxy.h"
-#include "interfaces/lmp/ilmputilproxy.h"
-
-class QPixmap;
-class QPoint;
-class QColor;
+#include <util/gui/findnotification.h>
 
 namespace LeechCraft
 {
-struct Entity;
-
-namespace LMP
+namespace Azoth
 {
-	struct MediaInfo;
-
-	QList<QFileInfo> RecIterateInfo (const QString& dirPath,
-			bool followSymlinks = false, std::atomic<bool> *stopFlag = nullptr);
-	QStringList RecIterate (const QString& dirPath, bool followSymlinks = false);
-
-	QString FindAlbumArtPath (const QString& near, bool ignoreCollection = false);
-	QPixmap FindAlbumArt (const QString& near, bool ignoreCollection = false);
-
-	void ShowAlbumArt (const QString& near, const QPoint& pos);
-
-	QMap<QString, std::function<QString (MediaInfo)>> GetSubstGetters ();
-	QMap<QString, std::function<void (MediaInfo&, QString)>> GetSubstSetters ();
-
-	QString PerformSubstitutions (QString mask, const MediaInfo& info, SubstitutionFlags = SFNone);
-
-	bool ShouldRememberProvs ();
-
-	QString MakeTrackListTooltip (const QList<QList<Media::ReleaseTrackInfo>>&);
-
-	bool CompareArtists (QString, QString, bool withoutThe);
-
-	QPair<QString, QColor> GetRuleSymbol (const Entity&);
+namespace ChatHistory
+{
+	class ChatFindBox : public Util::FindNotification
+	{
+		Q_OBJECT
+	public:
+		ChatFindBox (ICoreProxy_ptr, QWidget*);
+	protected:
+		void handleNext (const QString& text, FindFlags flags);
+	signals:
+		void next (const QString&, ChatFindBox::FindFlags);
+	};
+}
 }
 }

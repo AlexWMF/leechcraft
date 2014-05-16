@@ -27,47 +27,23 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#pragma once
-
-#include <atomic>
-#include <QStringList>
-#include <QFileInfo>
-#include <interfaces/media/idiscographyprovider.h>
-#include "interfaces/lmp/ilmpproxy.h"
-#include "interfaces/lmp/ilmputilproxy.h"
-
-class QPixmap;
-class QPoint;
-class QColor;
+#include "chatfindbox.h"
 
 namespace LeechCraft
 {
-struct Entity;
-
-namespace LMP
+namespace Azoth
 {
-	struct MediaInfo;
+namespace ChatHistory
+{
+	ChatFindBox::ChatFindBox (ICoreProxy_ptr proxy, QWidget *parent)
+	: FindNotification { proxy, parent }
+	{
+	}
 
-	QList<QFileInfo> RecIterateInfo (const QString& dirPath,
-			bool followSymlinks = false, std::atomic<bool> *stopFlag = nullptr);
-	QStringList RecIterate (const QString& dirPath, bool followSymlinks = false);
-
-	QString FindAlbumArtPath (const QString& near, bool ignoreCollection = false);
-	QPixmap FindAlbumArt (const QString& near, bool ignoreCollection = false);
-
-	void ShowAlbumArt (const QString& near, const QPoint& pos);
-
-	QMap<QString, std::function<QString (MediaInfo)>> GetSubstGetters ();
-	QMap<QString, std::function<void (MediaInfo&, QString)>> GetSubstSetters ();
-
-	QString PerformSubstitutions (QString mask, const MediaInfo& info, SubstitutionFlags = SFNone);
-
-	bool ShouldRememberProvs ();
-
-	QString MakeTrackListTooltip (const QList<QList<Media::ReleaseTrackInfo>>&);
-
-	bool CompareArtists (QString, QString, bool withoutThe);
-
-	QPair<QString, QColor> GetRuleSymbol (const Entity&);
+	void ChatFindBox::handleNext (const QString& text, FindFlags flags)
+	{
+		emit next (text, flags);
+	}
+}
 }
 }
