@@ -1,6 +1,6 @@
 /**********************************************************************
  * LeechCraft - modular cross-platform feature rich internet client.
- * Copyright (C) 2012  Like-all
+ * Copyright (C) 2006-2014  Georg Rudoy
  *
  * Boost Software License - Version 1.0 - August 17th, 2003
  *
@@ -29,43 +29,26 @@
 
 #pragma once
 
-#include <QObject>
-#include <interfaces/iinfo.h>
-#include <interfaces/ihavetabs.h>
+#include <memory>
+#include <QHash>
+#include <QString>
+
+class QIcon;
 
 namespace LeechCraft
 {
-namespace Shaitan
+namespace Util
 {
-	class Plugin : public QObject
-					, public IInfo
-					, public IHaveTabs
+	class ExtensionsDataImpl
 	{
-		Q_OBJECT
-		Q_INTERFACES (IInfo IHaveTabs)
-		
-		TabClassInfo TerminalTC_;
+		struct Details;
+		const std::shared_ptr<Details> Details_ {};
 	public:
-		void Init (ICoreProxy_ptr);
-		void SecondInit ();
-		QByteArray GetUniqueID () const;
-		void Release ();
-		QString GetName () const;
-		QString GetInfo () const;
-		QIcon GetIcon () const;
-		
-		TabClasses_t GetTabClasses () const;
-		void TabOpenRequested (const QByteArray&);
-		void statusBarChanged ();
-	signals:
-		void addNewTab (const QString&, QWidget*);
-		void removeTab (QWidget*);
-		void changeTabName (QWidget*, const QString&);
-		void changeTabIcon (QWidget*, const QIcon&);
-		void changeTooltip (QWidget*, QWidget*);
-		void raiseTab (QWidget*);
-		void statusBarChanged (QWidget*, const QString&);	
+		ExtensionsDataImpl ();
+
+		const QHash<QString, QString>& GetMimeDatabase () const;
+		QIcon GetExtIcon (const QString& extension) const;
+		QIcon GetMimeIcon (const QString& mime) const;
 	};
 }
 }
-

@@ -29,31 +29,22 @@
 
 #pragma once
 
-#include <iterator>
+#include <xmlsettingsdialog/basesettingsmanager.h>
 
 namespace LeechCraft
 {
-namespace Poleemery
+namespace Eleeminator
 {
-	template<typename T1, typename T2, template<typename U> class Container, typename F>
-	auto ZipWith (const Container<T1>& c1, const Container<T2>& c2, F f) -> Container<decltype (f (T1 (), T2 ()))>
+	class XmlSettingsManager : public Util::BaseSettingsManager
 	{
-		Container<decltype (f (T1 (), T2 ()))> result;
+		Q_OBJECT
 
-		auto i1 = std::begin (c1), e1 = std::end (c1);
-		auto i2 = std::begin (c2), e2 = std::end (c2);
-		for ( ; i1 != e1 && i2 != e2; ++i1, ++i2)
-			result.push_back (f (*i1, *i2));
-		return result;
-	}
-
-	template<typename T, template<typename U> class Container, typename F>
-	auto Map (const Container<T>& c, F f) -> Container<decltype (f (T ()))>
-	{
-		Container<decltype (f (T ()))> result;
-		for (auto t : c)
-			result.push_back (f (t));
-		return result;
-	}
+		XmlSettingsManager ();
+	public:
+		static XmlSettingsManager& Instance ();
+	protected:
+		virtual QSettings* BeginSettings () const;
+		virtual void EndSettings (QSettings*) const;
+	};
 }
 }

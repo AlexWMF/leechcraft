@@ -1,6 +1,6 @@
 /**********************************************************************
  * LeechCraft - modular cross-platform feature rich internet client.
- * Copyright (C) 2012  Like-all
+ * Copyright (C) 2014  Georg Rudoy
  *
  * Boost Software License - Version 1.0 - August 17th, 2003
  *
@@ -27,90 +27,86 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#include "terminalwidget.h"
-#include <QVBoxLayout>
-#include <QEvent>
-#include <QKeyEvent>
-#include <QMessageBox>
+#include "eleeminator.h"
+#include <QIcon>
+#include <QtDebug>
+#include <util/util.h>
+#include "termtab.h"
 
 namespace LeechCraft
 {
-namespace Shaitan
+namespace Eleeminator
 {
-	namespace
+	void Plugin::Init (ICoreProxy_ptr proxy)
 	{
-		class TerminalContainer : public QX11EmbedContainer
-		{
-		public:
-			TerminalContainer (QWidget *parent)
-			: QX11EmbedContainer (parent)
-			{
-			}
+		Proxy_ = proxy;
 
-			virtual bool eventFilter (QObject *obj, QEvent *event)
-			{
-				if (obj == this && event->type () == QEvent::KeyPress)
-				{
-					auto keyEvent = static_cast<QKeyEvent*> (event);
-					if (keyEvent->key () == (Qt::Key_PageDown & Qt::Key_Control) ||
-						keyEvent->key () == (Qt::Key_PageUp & Qt::Key_Control))
-						return false;
-				}
-				return QX11EmbedContainer::eventFilter (obj, event);
-			}
+		Util::InstallTranslator ("eleeminator");
+
+		TermTabTC_ =
+		{
+			GetUniqueID () + ".TermTab",
+			tr ("Terminal"),
+			tr ("Termianl emulator."),
+			GetIcon (),
+			15,
+			TFOpenableByRequest | TFOverridesTabClose
 		};
 	}
 
-	TerminalWidget::TerminalWidget (const TabClassInfo& tc, QObject *mt)
-	: TC_ (tc)
-	, ParentMT_ (mt)
-	, Embedder_ (new TerminalContainer (this))
+	void Plugin::SecondInit ()
 	{
-		Process_ = new QProcess (this);
-
-		auto lay = new QVBoxLayout;
-		setLayout (lay);
-		lay->addWidget (Embedder_);
-
-		Embedder_->adjustSize ();
-
-		Embedder_->show ();
-
-		connect (Process_,
-			SIGNAL (error (QProcess::ProcessError)),
-			this,
-			SLOT (gotError ()));
-
-		Process_->start ("xterm",
-			{ "-into", QString::number (Embedder_->winId ()) });
 	}
 
-	TabClassInfo TerminalWidget::GetTabClassInfo () const
+	QByteArray Plugin::GetUniqueID () const
 	{
-		return TC_;
+		return "org.LeechCraft.Eleeminator";
 	}
 
-	QToolBar* TerminalWidget::GetToolBar () const
+	void Plugin::Release ()
 	{
-		return 0;
 	}
 
-	QObject* TerminalWidget::ParentMultiTabs ()
+	QString Plugin::GetName () const
 	{
-		return ParentMT_;
+		return "Eleeminator";
 	}
 
-	void TerminalWidget::Remove ()
+	QString Plugin::GetInfo () const
 	{
-		emit removeTab (this);
-		deleteLater ();
+		return tr ("Embedded LeechCraft terminal emulator.");
 	}
 
-	void TerminalWidget::gotError ()
+	QIcon Plugin::GetIcon () const
 	{
-		QMessageBox::critical (this,
-		      "LeechCraft",
-		      tr ("XTerm has not started: %1.").arg (Process_->errorString()));
+		static QIcon icon { "lcicons:/resources/images/eleeminator.svg" };
+		return icon;
+	}
+
+	TabClasses_t Plugin::GetTabClasses () const
+	{
+		return { TermTabTC_ };
+	}
+
+	void Plugin::TabOpenRequested (const QByteArray& tc)
+	{
+		if (tc == TermTabTC_.TabClass_)
+		{
+			auto tab = new TermTab { Proxy_, TermTabTC_, this };
+			emit addNewTab (TermTabTC_.VisibleName_, tab);
+			emit raiseTab (tab);
+
+			connect (tab,
+					SIGNAL (remove (QWidget*)),
+					this,
+					SIGNAL (removeTab (QWidget*)));
+		}
+		else
+			qWarning () << Q_FUNC_INFO
+					<< "unknown tab class"
+					<< tc;
 	}
 }
 }
+
+LC_EXPORT_PLUGIN (leechcraft_eleeminator, LeechCraft::Eleeminator::Plugin);

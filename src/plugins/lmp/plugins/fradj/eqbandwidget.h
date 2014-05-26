@@ -27,41 +27,37 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#include "juffedwidget.h"
+#pragma once
+
+#include <QWidget>
+#include "ui_eqbandwidget.h"
 
 namespace LeechCraft
 {
-namespace JuffEd
+namespace LMP
 {
-	QObject *JuffEdWidget::S_ParentMultiTabs_ = 0;
-	
-	void JuffEdWidget::SetParentMultiTabs (QObject *obj)
-	{
-		S_ParentMultiTabs_ = obj;
-	}
+namespace Fradj
+{
+	struct BandInfo;
 
-	JuffEdWidget::JuffEdWidget (QWidget *parent)
-	: QWidget (parent)
+	class EqBandWidget : public QWidget
 	{
-	}
-	
-	void JuffEdWidget::Remove ()
-	{
-	}
-	
-	QToolBar* JuffEdWidget::GetToolBar () const
-	{
-		return 0;
-	}
+		Q_OBJECT
 
-	QObject* JuffEdWidget::ParentMultiTabs ()
-	{
-		return S_ParentMultiTabs_;
-	}
-	
-	QList<QAction*> JuffEdWidget::GetTabBarContextMenuActions () const
-	{
-		return QList<QAction*> ();
-	}
+		Ui::EqBandWidget Ui_;
+	public:
+		EqBandWidget (const BandInfo&, QWidget* = 0);
+
+		void SetGain (double);
+		double GetGain ();
+
+		double GetFrequency () const;
+	private slots:
+		void setGainSliderValue (double);
+		void setGainBoxValue (int);
+	signals:
+		void valueChanged (double);
+	};
+}
 }
 }

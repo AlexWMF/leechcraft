@@ -1,6 +1,6 @@
 /**********************************************************************
  * LeechCraft - modular cross-platform feature rich internet client.
- * Copyright (C) 2012  Like-all
+ * Copyright (C) 2006-2014  Georg Rudoy
  *
  * Boost Software License - Version 1.0 - August 17th, 2003
  *
@@ -27,77 +27,49 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#include "shaitan.h"
-#include "terminalwidget.h"
-#include <QIcon>
+#pragma once
+
+#include <QObject>
+#include "interfaces/lmp/ifilterelement.h"
+#include "iequalizer.h"
+
+typedef struct _GstPad GstPad;
+typedef struct _GstMessage GstMessage;
+typedef struct _GstPadTemplate GstPadTemplate;
 
 namespace LeechCraft
 {
-namespace Shaitan
+namespace LMP
 {
-	void Plugin::Init (ICoreProxy_ptr proxy)
-	{
-		TerminalTC_ =
-		{
-			GetUniqueID (),
-			"Shaitan",
-			GetInfo (),
-			GetIcon (),
-			40,
-			TFOpenableByRequest
-		};
-	}
+namespace Fradj
+{
+	class EqConfigurator;
 
-	void Plugin::SecondInit ()
+	class Eq10BandEffect : public QObject
+						 , public IFilterElement
+						 , public IEqualizer
 	{
-	}
+		const QByteArray FilterId_;
 
-	QByteArray Plugin::GetUniqueID () const
-	{
-		return "org.LeechCraft.Shaitan";
-	}
+		GstElement * const Equalizer_;
 
-	void Plugin::Release ()
-	{
-	}
-	
-	void Plugin::TabOpenRequested (const QByteArray& tabClass)
-	{
-		TerminalWidget *terminal = new TerminalWidget (TerminalTC_, this);
-		emit addNewTab ("Shaitan", terminal);
-		emit raiseTab (terminal);
-		connect (terminal, 
-				SIGNAL (removeTab (QWidget*)),
-				this, 
-				SIGNAL (removeTab (QWidget*)));
-	}
+		EqConfigurator * const Configurator_;
+	public:
+		Eq10BandEffect (const QByteArray& filterId);
 
-	QString Plugin::GetName () const
-	{
-		return "Shaitan";
-	}
-	
-	TabClasses_t Plugin::GetTabClasses () const
-	{
-		TabClasses_t tcs;
-		tcs << TerminalTC_;
-		return tcs;
-	}
+		QByteArray GetEffectId () const;
+		QByteArray GetInstanceId () const;
+		IFilterConfigurator* GetConfigurator () const;
 
-
-	QString Plugin::GetInfo () const
-	{
-		return tr ("");
-	}
-
-	QIcon Plugin::GetIcon () const
-	{
-		static QIcon icon ("lcicons:/resources/images/shaitan.svg");
-		return icon;
-	}
-	
+		BandInfos_t GetFixedBands () const;
+		QStringList GetPresets () const;
+		void SetPreset (const QString&);
+		QList<double> GetGains () const;
+		void SetGains (const QList<double>&);
+	protected:
+		GstElement* GetElement () const;
+	};
 }
 }
-
-LC_EXPORT_PLUGIN (leechcraft_shaitan, LeechCraft::Shaitan::Plugin);
+}
 

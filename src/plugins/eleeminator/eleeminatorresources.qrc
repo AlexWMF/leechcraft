@@ -1,5 +1,5 @@
 <RCC>
   <qresource prefix="/" >
-    <file>resources/images/shaitan.svg</file>
+    <file>resources/images/eleeminator.svg</file>
   </qresource>
 </RCC>

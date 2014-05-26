@@ -27,33 +27,43 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#ifndef PLUGINS_JUFFED_JUFFEDWIDGET_H
-#define PLUGINS_JUFFED_JUFFEDWIDGET_H
-#include <QWidget>
-#include <interfaces/ihavetabs.h>
+#pragma once
+
+#include <QObject>
+#include <interfaces/iinfo.h>
+#include <interfaces/iplugin2.h>
+#include <interfaces/lmp/ilmpplugin.h>
+#include <interfaces/lmp/ifilterplugin.h>
 
 namespace LeechCraft
 {
-namespace JuffEd
+namespace LMP
 {
-	class JuffEdWidget : public QWidget
-					   , public ITabWidget
+namespace Fradj
+{
+	class Plugin : public QObject
+				 , public IInfo
+				 , public IPlugin2
+				 , public ILMPPlugin
+				 , public IFilterPlugin
 	{
 		Q_OBJECT
-		Q_INTERFACES (ITabWidget)
-		
-		static QObject *S_ParentMultiTabs_;
+		Q_INTERFACES (IInfo IPlugin2 LeechCraft::LMP::IFilterPlugin)
 	public:
-		static void SetParentMultiTabs (QObject*);
+		void Init (ICoreProxy_ptr);
+		void SecondInit ();
+		void Release ();
+		QByteArray GetUniqueID () const;
+		QString GetName () const;
+		QString GetInfo () const;
+		QIcon GetIcon () const;
 
-		JuffEdWidget (QWidget* = 0);
-		
-		void Remove ();
-		QToolBar* GetToolBar () const;
-		QObject* ParentMultiTabs ();
-		QList<QAction*> GetTabBarContextMenuActions () const;
+		QSet<QByteArray> GetPluginClasses () const;
+
+		void SetLMPProxy (ILMPProxy_ptr);
+
+		QList<EffectInfo> GetEffects () const;
 	};
 }
 }
-
-#endif
+}

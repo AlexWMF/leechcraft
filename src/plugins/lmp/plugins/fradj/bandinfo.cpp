@@ -27,46 +27,19 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#ifndef PLUGINS_JUFFED_JUFFED_H
-#define PLUGINS_JUFFED_JUFFED_H
-#include <QObject>
-#include <interfaces/iinfo.h>
-#include <interfaces/ihavetabs.h>
+#include "bandinfo.h"
 
 namespace LeechCraft
 {
-namespace JuffEd
+namespace LMP
 {
-	class Plugin : public QObject
-				 , public IInfo
-				 , public IHaveTabs
+namespace Fradj
+{
+	BandInfo::BandInfo (double freq, double width)
+	: Freq_ { freq }
+	, Width_ { width }
 	{
-		Q_OBJECT
-		Q_INTERFACES (IInfo IHaveTabs)
-		
-		TabClasses_t TabClasses_;
-	public:
-		void Init (ICoreProxy_ptr);
-		void SecondInit ();
-		QByteArray GetUniqueID () const;
-		void Release ();
-		QString GetName () const;
-		QString GetInfo () const;
-		QIcon GetIcon () const;
-		
-		TabClasses_t GetTabClasses () const;
-		void TabOpenRequested (const QByteArray&);
-	signals:
-		void addNewTab (const QString& name, QWidget *tabContents);
-		void removeTab (QWidget *tabContents);
-		void changeTabName (QWidget *tabContents, const QString& name);
-		void changeTabIcon (QWidget *tabContents, const QIcon& icon);
-		void changeTooltip (QWidget*, QWidget*);
-		void statusBarChanged (QWidget *tabContents, const QString& text);
-		void raiseTab (QWidget *tabContents);
-	};
+	}
 }
 }
-
-#endif
-
+}

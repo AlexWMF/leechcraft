@@ -27,72 +27,36 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#include "juffed.h"
+#include "extensionsdataimpl.h"
 #include <QIcon>
 
 namespace LeechCraft
 {
-namespace JuffEd
+namespace Util
 {
-	void Plugin::Init (ICoreProxy_ptr)
+	struct ExtensionsDataImpl::Details
 	{
-		TabClassInfo tc =
-		{
-			"Juffed",
-			tr ("Advanced text editor"),
-			tr ("JuffEd, the advanced text editor ported to LeechCraft"),
-			GetIcon (),
-			67,
-			TFOpenableByRequest
-		};
-		TabClasses_ << tc;
-	}
+		QHash<QString, QString> MimeDatabase_;
+	};
 
-	void Plugin::SecondInit ()
+	ExtensionsDataImpl::ExtensionsDataImpl ()
+	: Details_ { new Details }
 	{
 	}
 
-	QByteArray Plugin::GetUniqueID () const
+	const QHash<QString, QString>& ExtensionsDataImpl::GetMimeDatabase () const
 	{
-		return "org.LeechCraft.JuffEd";
+		return Details_->MimeDatabase_;
 	}
 
-	void Plugin::Release ()
+	QIcon ExtensionsDataImpl::GetExtIcon (const QString& extension) const
 	{
+		return {};
 	}
 
-	QString Plugin::GetName () const
+	QIcon ExtensionsDataImpl::GetMimeIcon (const QString& mime) const
 	{
-		return "JuffEd";
-	}
-
-	QString Plugin::GetInfo () const
-	{
-		return tr ("The advanced text editor.");
-	}
-
-	QIcon Plugin::GetIcon () const
-	{
-		return QIcon ();
-	}
-	
-	TabClasses_t Plugin::GetTabClasses () const
-	{
-		return TabClasses_;
-	}
-	
-	void Plugin::TabOpenRequested (const QByteArray& tabClass)
-	{
-		if (tabClass == "Juffed")
-		{
-			// open new tab with juffed
-		}
-		else
-			qWarning () << Q_FUNC_INFO
-					<< "unknown tab class"
-					<< tabClass;
+		return {};
 	}
 }
 }
-
-LC_EXPORT_PLUGIN (leechcraft_juffed, LeechCraft::JuffEd::Plugin);
