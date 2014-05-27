@@ -27,51 +27,45 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#include "urlframe.h"
+#pragma once
+
+#include <memory>
+#include <QObject>
+#include <QMenu>
+
+class QAction;
 
 namespace LeechCraft
 {
 namespace Poshuku
 {
-	URLFrame::URLFrame (QWidget *parent)
-	: QFrame (parent)
-	{
-		Ui_.setupUi (this);
-	}
+	class CustomWebView;
+	class ProgressLineEdit;
+	class WebPageSslWatcher;
 
-	QLineEdit* URLFrame::GetEdit () const
+	class UrlEditButtonsManager : public QObject
 	{
-		return Ui_.URLEdit_;
-	}
+		Q_OBJECT
 
-	ProgressLineEdit* URLFrame::GetEditAsProgressLine () const
-	{
-		return Ui_.URLEdit_;
-	}
+		CustomWebView * const View_;
+		ProgressLineEdit * const LineEdit_;
+		WebPageSslWatcher * const SslWatcher_;
+		QAction * const Add2Favorites_;
+		QAction * const SslStateAction_;
 
-	void URLFrame::SetFavicon (const QIcon& icon)
-	{
-		QPixmap pixmap = icon.pixmap (Ui_.FaviconLabel_->size ());
-		Ui_.FaviconLabel_->setPixmap (pixmap);
-	}
+		const std::shared_ptr<QMenu> ExternalLinks_;
+		QAction * const ExternalLinksAction_;
+	public:
+		UrlEditButtonsManager (CustomWebView*, ProgressLineEdit*, WebPageSslWatcher*, QAction*);
+	public slots:
+		void handleSslState ();
+	private slots:
+		void checkPageAsFavorite (const QString&);
 
-	void URLFrame::AddWidget (QWidget *widget)
-	{
-		layout ()->addWidget (widget);
-	}
+		void checkLinkRels ();
+		void showSendersMenu ();
 
-	void URLFrame::RemoveWidget (QWidget *widget)
-	{
-		layout ()->removeWidget (widget);
-	}
-
-	void URLFrame::on_URLEdit__returnPressed ()
-	{
-		if (Ui_.URLEdit_->IsCompleting () ||
-				Ui_.URLEdit_->text ().isEmpty ())
-			return;
-
-		emit load (Ui_.URLEdit_->text ());
-	}
+		void updateBookmarksState ();
+	};
 }
 }

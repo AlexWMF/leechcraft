@@ -27,51 +27,58 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#include "urlframe.h"
+#pragma once
+
+#include <QSet>
+#include <QNetworkAccessManager>
+#include <QWebPage>
+#include <interfaces/core/ihookproxy.h>
+
+class QNetworkReply;
+class QUrl;
 
 namespace LeechCraft
 {
 namespace Poshuku
 {
-	URLFrame::URLFrame (QWidget *parent)
-	: QFrame (parent)
+	class WebPageSslWatcher : public QObject
 	{
-		Ui_.setupUi (this);
-	}
+		Q_OBJECT
 
-	QLineEdit* URLFrame::GetEdit () const
-	{
-		return Ui_.URLEdit_;
-	}
+		QWebPage * const Page_;
 
-	ProgressLineEdit* URLFrame::GetEditAsProgressLine () const
-	{
-		return Ui_.URLEdit_;
-	}
+		QList<QUrl> SslResources_;
+		QList<QUrl> ErrSslResources_;
+		QList<QUrl> NonSslResources_;
 
-	void URLFrame::SetFavicon (const QIcon& icon)
-	{
-		QPixmap pixmap = icon.pixmap (Ui_.FaviconLabel_->size ());
-		Ui_.FaviconLabel_->setPixmap (pixmap);
-	}
+		QSet<QNetworkReply*> PendingErrors_;
+	public:
+		WebPageSslWatcher (QWebPage*);
 
-	void URLFrame::AddWidget (QWidget *widget)
-	{
-		layout ()->addWidget (widget);
-	}
+		enum class State
+		{
+			NoSsl,
+			SslErrors,
+			UnencryptedElems,
+			FullSsl
+		};
+		State GetPageState () const;
+	public slots:
+		void resetStats ();
+	private slots:
+		void handleReplyFinished ();
+		void handleSslErrors (const QList<QSslError>&);
 
-	void URLFrame::RemoveWidget (QWidget *widget)
-	{
-		layout ()->removeWidget (widget);
-	}
+		void handleReplyCreated (QNetworkAccessManager::Operation,
+				const QNetworkRequest&, QNetworkReply*);
 
-	void URLFrame::on_URLEdit__returnPressed ()
-	{
-		if (Ui_.URLEdit_->IsCompleting () ||
-				Ui_.URLEdit_->text ().isEmpty ())
-			return;
-
-		emit load (Ui_.URLEdit_->text ());
-	}
+		void handleNavigationRequest (LeechCraft::IHookProxy_ptr,
+				QWebPage*,
+				QWebFrame*,
+				const QNetworkRequest&,
+				QWebPage::NavigationType);
+	signals:
+		void sslStateChanged (WebPageSslWatcher*);
+	};
 }
 }
