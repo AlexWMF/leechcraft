@@ -29,45 +29,27 @@
 
 #pragma once
 
-#include <memory>
-#include <QObject>
-#include <QMenu>
-
-class QAction;
+#include <QDialog>
+#include <QSslCertificate>
+#include "ui_sslstatedialog.h"
 
 namespace LeechCraft
 {
 namespace Poshuku
 {
-	class CustomWebView;
-	class ProgressLineEdit;
 	class WebPageSslWatcher;
 
-	class UrlEditButtonsManager : public QObject
+	class SslStateDialog : public QDialog
 	{
 		Q_OBJECT
 
-		CustomWebView * const View_;
-		ProgressLineEdit * const LineEdit_;
-		WebPageSslWatcher * const SslWatcher_;
-		QAction * const Add2Favorites_;
-		QAction * const SslStateAction_;
+		Ui::SslStateDialog Ui_;
 
-		const std::shared_ptr<QMenu> ExternalLinks_;
-		QAction * const ExternalLinksAction_;
+		QList<QSslCertificate> Certs_;
 	public:
-		UrlEditButtonsManager (CustomWebView*, ProgressLineEdit*, WebPageSslWatcher*, QAction*);
-	public slots:
-		void handleSslState ();
+		SslStateDialog (const WebPageSslWatcher*, QWidget* = 0);
 	private slots:
-		void checkPageAsFavorite (const QString&);
-
-		void checkLinkRels ();
-		void showSendersMenu ();
-
-		void showSslDialog ();
-
-		void updateBookmarksState ();
+		void on_CertChainBox__currentIndexChanged (int);
 	};
 }
 }
