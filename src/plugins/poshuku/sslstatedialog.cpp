@@ -44,6 +44,7 @@ namespace Poshuku
 
 		QString iconName;
 		QString title;
+		bool hasInsecure = false;
 		switch (watcher->GetPageState ())
 		{
 		case WebPageSslWatcher::State::NoSsl:
@@ -54,6 +55,7 @@ namespace Poshuku
 			title = tr ("Some SSL errors where encountered.");
 			break;
 		case WebPageSslWatcher::State::UnencryptedElems:
+			hasInsecure = true;
 			iconName = "security-medium";
 			title = tr ("Some elements were loaded via unencrypted connection.");
 			break;
@@ -61,6 +63,12 @@ namespace Poshuku
 			iconName = "security-high";
 			title = tr ("Everything is secure!");
 			break;
+		}
+
+		if (!hasInsecure)
+		{
+			const auto insecureIdx = Ui_.TabWidget_->indexOf (Ui_.InsecureTab_);
+			Ui_.TabWidget_->removeTab (insecureIdx);
 		}
 
 		if (!iconName.isEmpty ())
@@ -109,6 +117,13 @@ namespace Poshuku
 		setIssuerInfo (Ui_.IssuerCountry_, QSslCertificate::CountryName);
 		setIssuerInfo (Ui_.IssuerState_, QSslCertificate::StateOrProvinceName);
 		setIssuerInfo (Ui_.IssuerCity_, QSslCertificate::LocalityName);
+
+		Ui_.SerialNumber_->setText (cert.serialNumber ());
+		Ui_.Md5_->setText (cert.digest (QCryptographicHash::Md5).toHex ());
+		Ui_.Sha1_->setText (cert.digest (QCryptographicHash::Sha1).toHex ());
+
+		Ui_.StartDate_->setText (QLocale {}.toString (cert.effectiveDate ()));
+		Ui_.EndDate_->setText (QLocale {}.toString (cert.expiryDate ()));
 	}
 }
 }

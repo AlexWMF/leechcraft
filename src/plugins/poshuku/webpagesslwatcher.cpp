@@ -87,6 +87,12 @@ namespace Poshuku
 		if (url.scheme () == "data")
 			return;
 
+		const bool isCached = reply->attribute (QNetworkRequest::SourceIsFromCacheAttribute).toBool ();
+		const bool connEncrypted = reply->attribute (QNetworkRequest::ConnectionEncryptedAttribute).toBool ();
+
+		if (isCached && !connEncrypted)
+			return;
+
 		if (PendingErrors_.remove (reply))
 			ErrSslResources_ << url;
 
@@ -97,7 +103,8 @@ namespace Poshuku
 		{
 			SslResources_ << url;
 
-			if (url == Page_->mainFrame ()->url ())
+			const auto& frameUrl = Page_->mainFrame ()->url ();
+			if (url.host () == frameUrl.host ())
 			{
 				qDebug () << Q_FUNC_INFO
 						<< "detected main frame cert for URL"
