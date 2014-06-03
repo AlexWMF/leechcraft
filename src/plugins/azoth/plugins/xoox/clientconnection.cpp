@@ -515,6 +515,11 @@ namespace Xoox
 		return XferManager_;
 	}
 
+	QXmppEntityTimeManager* ClientConnection::GetEntityTimeManager () const
+	{
+		return EntityTimeManager_;
+	}
+
 	CapsManager* ClientConnection::GetCapsManager () const
 	{
 		return CapsManager_;
@@ -732,10 +737,25 @@ namespace Xoox
 		if (rm.getRosterBareJids ().contains (jid))
 			rm.removeItem (jid);
 		else
+		{
+			qWarning () << Q_FUNC_INFO
+					<< jid
+					<< "isn't present in roster manager, removing directly";
 			handleRosterItemRemoved (jid);
+		}
 
 		if (ODSEntries_.contains (jid))
-			delete ODSEntries_.take (jid);
+		{
+			const auto otherEntry = ODSEntries_.take (jid);
+			if (otherEntry != entry)
+				qWarning () << Q_FUNC_INFO
+						<< "stored ODS entry isn't equal to entry for"
+						<< jid
+						<< "!";
+			emit rosterItemRemoved (otherEntry);
+
+			delete otherEntry;
+		}
 	}
 
 	void ClientConnection::WhitelistError (const QString& id)

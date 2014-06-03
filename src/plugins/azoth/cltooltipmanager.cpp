@@ -36,6 +36,7 @@
 #include <interfaces/azoth/imucperms.h>
 #include <interfaces/azoth/iproxyobject.h>
 #include "interfaces/azoth/iadvancedclentry.h"
+#include "interfaces/azoth/ihaveentitytime.h"
 #include "core.h"
 #include "activitydialog.h"
 #include "mooddialog.h"
@@ -328,6 +329,12 @@ namespace Azoth
 			if (info.contains ("client_os"))
 				tip += "<br />" + tr ("OS:") + ' ' + Qt::escape (info.value ("client_os").toString ());
 
+			if (info.contains ("client_time"))
+			{
+				const auto& dateStr = QLocale {}.toString (info.value ("client_time").toDateTime ());
+				tip += "<br />" + tr ("Client time:") + ' ' + dateStr;
+			}
+
 			if (info.contains ("user_mood"))
 				FormatMood (tip, info ["user_mood"].toMap ());
 			if (info.contains ("user_activity"))
@@ -352,6 +359,18 @@ namespace Azoth
 
 	void CLTooltipManager::RebuildTooltip (ICLEntry *entry)
 	{
+		if (const auto ihet = qobject_cast<IHaveEntityTime*> (entry->GetQObject ()))
+		{
+			ihet->UpdateEntityTime ();
+
+			for (const auto& var : entry->Variants ())
+				if (entry->GetClientInfo (var).contains ("client_time"))
+				{
+					DirtyTooltips_ << entry;
+					break;
+				}
+		}
+
 		if (!DirtyTooltips_.contains (entry))
 			return;
 

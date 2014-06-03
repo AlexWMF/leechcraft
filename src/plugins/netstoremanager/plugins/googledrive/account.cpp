@@ -120,12 +120,12 @@ namespace GoogleDrive
 	}
 
 	void Account::Download (const QByteArray& id, const QString& filepath,
-			TaskParameters tp, bool silent, bool open)
+			TaskParameters tp, bool open)
 	{
 		if (id.isEmpty ())
 			return;
 
-		DriveManager_->Download (id, filepath, tp, silent, open);
+		DriveManager_->Download (id, filepath, tp, open);
 	}
 
 	ListingOps Account::GetListingOps () const
@@ -141,6 +141,11 @@ namespace GoogleDrive
 	void Account::RefreshListing ()
 	{
 		DriveManager_->RefreshListing ();
+	}
+
+	void Account::RefreshChildren (const QByteArray& parentId)
+	{
+		emit listingUpdated (parentId);
 	}
 
 	void Account::Delete (const QList<QByteArray>& ids, bool ask)
@@ -306,7 +311,7 @@ namespace GoogleDrive
 		{
 			StorageItem storageItem;
 			storageItem.ID_ = item.Id_.toUtf8 ();
-			storageItem.ParentID_ = item.ParentId_.toUtf8 ();
+			storageItem.ParentID_ = item.ParentIsRoot_ ? QByteArray () : item.ParentId_.toUtf8 ();
 			storageItem.Name_ = item.Name_;
 			storageItem.Size_ = item.FileSize_;
 			storageItem.ModifyDate_ = item.ModifiedDate_;
@@ -336,6 +341,7 @@ namespace GoogleDrive
 			result << CreateItem (item);
 
 		emit gotListing (result);
+		emit listingUpdated (QByteArray ());
 	}
 
 	void Account::handleSharedFileId (const QString& id)
@@ -347,6 +353,7 @@ namespace GoogleDrive
 	void Account::handleGotNewItem (const DriveItem& item)
 	{
 		emit gotNewItem (CreateItem (item), item.ParentId_.toUtf8 ());
+		emit listingUpdated (item.ParentIsRoot_ ? QByteArray () : item.ParentId_.toUtf8 ());
 	}
 
 	void Account::handleGotChanges (const QList<DriveChanges>& driveChanges)

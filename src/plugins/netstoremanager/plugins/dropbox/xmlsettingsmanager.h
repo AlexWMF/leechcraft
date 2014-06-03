@@ -1,6 +1,6 @@
 /**********************************************************************
  * LeechCraft - modular cross-platform feature rich internet client.
- * Copyright (C) 2006-2014  Georg Rudoy
+ * Copyright (C) 2010-2013  Oleg Linkin <MaledictusDeMagog@gmail.com>
  *
  * Boost Software License - Version 1.0 - August 17th, 2003
  *
@@ -29,45 +29,22 @@
 
 #pragma once
 
-#include <memory>
-#include <QString>
-
-#if USE_PCRE
-// nothing yet
-#else
-#include <QRegExp>
-#endif
+#include <xmlsettingsdialog/basesettingsmanager.h>
 
 namespace LeechCraft
 {
-namespace Poshuku
+namespace NetStoreManager
 {
-namespace CleanWeb
+namespace DBox
 {
-#if USE_PCRE
-	class PCREWrapper;
-#endif
-
-	class RegExp
+	class XmlSettingsManager : public Util::BaseSettingsManager
 	{
-#if USE_PCRE
-		std::shared_ptr<PCREWrapper> PRx_;
-#else
-		QRegExp Rx_;
-#endif
+		XmlSettingsManager ();
 	public:
-		static bool IsFast ();
-
-		RegExp ();
-		RegExp (const RegExp&);
-		RegExp (const QString&, Qt::CaseSensitivity);
-		~RegExp ();
-		RegExp& operator= (const RegExp&);
-
-		bool Matches (const QString&) const;
-
-		QString GetPattern () const;
-		Qt::CaseSensitivity GetCaseSensitivity () const;
+		static XmlSettingsManager& Instance ();
+	protected:
+		virtual QSettings* BeginSettings () const;
+		virtual void EndSettings (QSettings*) const;
 	};
 }
 }

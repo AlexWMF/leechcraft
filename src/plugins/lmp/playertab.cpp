@@ -38,7 +38,9 @@
 #include <QListWidget>
 #include <QTabBar>
 #include <QMessageBox>
+#include <QToolButton>
 #include <util/xpc/util.h>
+#include <util/sll/slotclosure.h>
 #include <interfaces/core/ipluginsmanager.h>
 #include <interfaces/media/iaudioscrobbler.h>
 #include <interfaces/media/isimilarartists.h>
@@ -68,16 +70,17 @@ namespace LeechCraft
 {
 namespace LMP
 {
-	PlayerTab::PlayerTab (const TabClassInfo& info, QObject *plugin, QWidget *parent)
+	PlayerTab::PlayerTab (const TabClassInfo& info, Player *player, QObject *plugin, QWidget *parent)
 	: QWidget (parent)
 	, Plugin_ (plugin)
 	, TC_ (info)
-	, Player_ (Core::Instance ().GetPlayer ())
+	, Player_ (player)
 	, PreviewHandler_ (Core::Instance ().GetPreviewHandler ())
 	, TabToolbar_ (new QToolBar ())
 	, PlayPause_ (0)
 	, TrayMenu_ (new QMenu ("LMP", this))
 	, NPPixmapHandler_ (new NowPlayingPixmapHandler (this))
+	, EffectsMenu_ (new QMenu (tr ("Effects"), this))
 	{
 		Ui_.setupUi (this);
 		Ui_.MainSplitter_->setStretchFactor (0, 2);
@@ -353,6 +356,12 @@ namespace LMP
 		volumeSlider->setMaximumWidth (160);
 		TabToolbar_->addWidget (volumeSlider);
 
+		auto effectsMenuButton = new QToolButton;
+		effectsMenuButton->setMenu (EffectsMenu_);
+		effectsMenuButton->setPopupMode (QToolButton::InstantPopup);
+		effectsMenuButton->setProperty ("ActionIcon", "preferences-plugin");
+		TabToolbar_->addWidget (effectsMenuButton);
+
 		// fill tray menu
 		connect (TrayIcon_,
 				SIGNAL (changedVolume (qreal)),
@@ -503,6 +512,35 @@ namespace LMP
 			e.Additional_ ["NotificationPixmap"] = notifyPx;
 			emit gotEntity (e);
 		}
+	}
+
+	void PlayerTab::updateEffectsList (const QStringList& effectsList)
+	{
+		EffectsMenu_->clear ();
+
+		for (int i = 0; i < effectsList.size (); ++i)
+		{
+			auto action = EffectsMenu_->addAction (effectsList.at (i));
+			new Util::SlotClosure<Util::NoDeletePolicy>
+			{
+				[this, i] { emit effectsConfigRequested (i); },
+				action,
+				SIGNAL (triggered ()),
+				action
+			};
+		}
+
+		if (!effectsList.isEmpty ())
+			EffectsMenu_->addSeparator ();
+
+		auto pageAct = EffectsMenu_->addAction (tr ("Open effects configuration page..."));
+		new Util::SlotClosure<Util::NoDeletePolicy>
+		{
+			[] { XmlSettingsManager::Instance ().ShowSettingsPage ("EffectsView"); },
+			pageAct,
+			SIGNAL (triggered ()),
+			pageAct
+		};
 	}
 
 	namespace

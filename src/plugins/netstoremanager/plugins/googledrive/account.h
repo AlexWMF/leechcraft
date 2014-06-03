@@ -79,12 +79,13 @@ namespace GoogleDrive
 				UploadType ut = UploadType::Upload,
 				const QByteArray& id = QByteArray ());
 		void Download (const QByteArray& id, const QString& filepath,
-				TaskParameters tp, bool silent = false, bool open = false);
+				TaskParameters tp, bool open);
 
 		ListingOps GetListingOps () const;
 		HashAlgorithm GetCheckSumAlgorithm () const;
 
 		void RefreshListing ();
+		void RefreshChildren (const QByteArray& parentId);
 
 		void Delete (const QList<QByteArray>& ids, bool ask = true);
 		void MoveToTrash (const QList<QByteArray>& ids);
@@ -121,6 +122,7 @@ namespace GoogleDrive
 		void upStatusChanged (const QString& status, const QString& filepath);
 
 		void gotListing (const QList<StorageItem>& items);
+		void listingUpdated (const QByteArray& parentId);
 
 		void gotFileUrl (const QUrl& url, const QByteArray& id);
 

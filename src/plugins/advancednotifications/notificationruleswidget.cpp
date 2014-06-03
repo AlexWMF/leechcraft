@@ -130,7 +130,7 @@ namespace AdvancedNotifications
 		return types;
 	}
 
-	NotificationRule NotificationRulesWidget::GetRuleFromUI () const
+	NotificationRule NotificationRulesWidget::GetRuleFromUI (QModelIndex curIdx) const
 	{
 		const QStringList& types = GetSelectedTypes ();
 
@@ -170,7 +170,8 @@ namespace AdvancedNotifications
 			cmdArgs << Ui_.CommandArgsTree_->topLevelItem (i)->text (0);
 		rule.SetCmdParams (CmdParams (Ui_.CommandLineEdit_->text ().simplified (), cmdArgs));
 
-		const QModelIndex& curIdx = Ui_.RulesTree_->currentIndex ();
+		if (!curIdx.isValid ())
+			curIdx = Ui_.RulesTree_->currentIndex ();
 		rule.SetEnabled (curIdx.sibling (curIdx.row (), 0).data (Qt::CheckStateRole) == Qt::Checked);
 		rule.SetSingleShot (Ui_.RuleSingleShot_->checkState () == Qt::Checked);
 
@@ -284,7 +285,7 @@ namespace AdvancedNotifications
 		if (prevIndex.isValid ())
 		{
 			const auto& prevRule = RM_->GetRulesList ().value (prevIndex.row ());
-			const auto& uiRule = GetRuleFromUI ();
+			const auto& uiRule = GetRuleFromUI (prevIndex);
 			if (uiRule != prevRule &&
 					QMessageBox::question (this,
 							"LeechCraft",

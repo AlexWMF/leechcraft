@@ -132,7 +132,7 @@ namespace LMP
 		auto mgr = new RootPathSettingsManager (this);
 		XSD_->SetDataSource ("RootPathsView", mgr->GetModel ());
 
-		PlayerTab_ = new PlayerTab (PlayerTC_, this);
+		PlayerTab_ = new PlayerTab (PlayerTC_, Core::Instance ().GetPlayer (), this);
 
 		Core::Instance ().GetLmpProxy ()->GetGuiProxy ()->SetPlayerTab (PlayerTab_);
 
@@ -161,8 +161,16 @@ namespace LMP
 				this,
 				SLOT (handleArtistBrowseRequested (QString)));
 
-		EffectsMgr_ = new EffectsManager (PlayerTab_->GetPlayer ()->GetPath (), this);
+		EffectsMgr_ = new EffectsManager (Core::Instance ().GetPlayer ()->GetPath (), this);
 		XSD_->SetDataSource ("EffectsView", EffectsMgr_->GetEffectsModel ());
+		connect (EffectsMgr_,
+				SIGNAL (effectsListChanged (QStringList)),
+				PlayerTab_,
+				SLOT (updateEffectsList (QStringList)));
+		connect (PlayerTab_,
+				SIGNAL (effectsConfigRequested (int)),
+				EffectsMgr_,
+				SLOT (showEffectConfig (int)));
 
 		connect (PlayerTab_,
 				SIGNAL (fullRaiseRequested ()),

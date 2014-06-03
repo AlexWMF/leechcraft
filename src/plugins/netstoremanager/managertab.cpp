@@ -232,6 +232,7 @@ namespace NetStoreManager
 	void ManagerTab::FillToolbar ()
 	{
 		AccountsBox_ = new QComboBox (this);
+		AccountsBox_->setSizeAdjustPolicy (QComboBox::AdjustToContents);
 		Q_FOREACH (auto acc, AM_->GetAccounts ())
 		{
 			auto stP = qobject_cast<IStoragePlugin*> (acc->GetParentPlugin ());
@@ -242,9 +243,13 @@ namespace NetStoreManager
 			if (acc->GetAccountFeatures () & AccountFeature::FileListings)
 			{
 				connect (acc->GetQObject (),
-						SIGNAL (gotListing (const QList<StorageItem>&)),
+						SIGNAL (gotListing (QList<StorageItem>)),
 						this,
-						SLOT (handleGotListing (const QList<StorageItem>&)));
+						SLOT (handleGotListing (QList<StorageItem>)));
+				connect (acc->GetQObject (),
+						SIGNAL (listingUpdated (QByteArray)),
+						this,
+						SLOT (handleListingUpdated (QByteArray)));
 				connect (acc->GetQObject (),
 						SIGNAL (gotNewItem (StorageItem, QByteArray)),
 						this,
@@ -291,7 +296,6 @@ namespace NetStoreManager
 		Trash_->setText (tr ("Trash"));
 		Trash_->setPopupMode (QToolButton::InstantPopup);
 		Trash_->addActions ({ OpenTrash_, EmptyTrash_ });
-
 		ToolBar_->addWidget (Trash_);
 
 		ShowAccountActions (AccountsBox_->count ());
@@ -338,12 +342,6 @@ namespace NetStoreManager
 		TreeModel_->removeRows (0, TreeModel_->rowCount ());
 	}
 
-	void ManagerTab::FillModel (IStorageAccount *acc)
-	{
-		ClearModel ();
-		FillListModel (acc);
-	}
-
 	namespace
 	{
 		QList<QStandardItem*> CreateItems (const StorageItem& storageItem, quint64 folderSize, ICoreProxy_ptr proxy)
@@ -388,11 +386,8 @@ namespace NetStoreManager
 		}
 	}
 
-	void ManagerTab::FillListModel (IStorageAccount *acc)
+	void ManagerTab::FillListModel ()
 	{
-		if (acc != GetCurrentAccount ())
-			return;
-
 		ShowListItemsWithParent (LastParentID_, OpenTrash_->isChecked ());
 
 		Ui_.FilesView_->header ()->resizeSection (Columns::CName,
@@ -485,11 +480,12 @@ namespace NetStoreManager
 	void ManagerTab::ShowListItemsWithParent (const QByteArray& parentId, bool inTrash)
 	{
 		ClearModel ();
-		if (Id2Item_.contains (parentId))
+		if (!parentId.isEmpty ())
 		{
 			QStandardItem *upLevel = new QStandardItem (Proxy_->GetIconThemeManager ()->GetIcon ("go-up"), "..");
 			upLevel->setData ("netstoremanager.item_uplevel", ListingRole::ID);
 			upLevel->setData (parentId, ListingRole::ParentID);
+			upLevel->setEditable (false);
 			TreeModel_->appendRow ({ upLevel });
 		}
 
@@ -501,25 +497,25 @@ namespace NetStoreManager
 			if (!inTrash &&
 					!item.IsTrashed_)
 			{
-				if (parentId.isNull () &&
+				if (parentId.isEmpty () &&
 						!Id2Item_.contains (item.ParentID_))
 					TreeModel_->appendRow (CreateItems (item, folderSize, Proxy_));
-				else if (!parentId.isNull () &&
+				else if (!parentId.isEmpty () &&
 						item.ParentID_ == parentId)
 					TreeModel_->appendRow (CreateItems (item, folderSize, Proxy_));
 			}
 			else if (inTrash &&
 					item.IsTrashed_)
 			{
-				if (parentId.isNull () &&
+				if (parentId.isEmpty () &&
 						(!Id2Item_.contains (item.ParentID_) ||
 						!Id2Item_ [item.ParentID_].IsTrashed_))
 					TreeModel_->appendRow (CreateItems (item, folderSize, Proxy_));
-				else if (!parentId.isNull () &&
+				else if (!parentId.isEmpty () &&
 						item.ParentID_ == parentId &&
 						Id2Item_ [parentId].IsTrashed_)
 					TreeModel_->appendRow (CreateItems (item, folderSize, Proxy_));
-				else if (!parentId.isNull () &&
+				else if (!parentId.isEmpty () &&
 						!Id2Item_ [parentId].IsTrashed_)
 					ShowListItemsWithParent (QByteArray (), true);
 			}
@@ -552,7 +548,8 @@ namespace NetStoreManager
 
 		const QString& filename = QFileDialog::getOpenFileName (this,
 				tr ("Select file for upload"),
-				XmlSettingsManager::Instance ().Property ("DirUploadFrom", QDir::homePath ()).toString ());
+				XmlSettingsManager::Instance ()
+						.Property ("DirUploadFrom", QDir::homePath ()).toString ());
 		if (filename.isEmpty ())
 			return;
 
@@ -564,14 +561,25 @@ namespace NetStoreManager
 
 	void ManagerTab::handleDoubleClicked (const QModelIndex& idx)
 	{
+		auto isa = GetCurrentAccount ();
+		if (!isa)
+			return;
+
 		if (idx.data (ListingRole::ID).toByteArray () == "netstoremanager.item_uplevel")
-			ShowListItemsWithParent (Id2Item_ [idx.data (Qt::UserRole + 1).toByteArray ()].ParentID_,
-					OpenTrash_->isChecked ());
+		{
+			if (auto isfl = qobject_cast<ISupportFileListings*> (isa->GetQObject ()))
+			{
+				LastParentID_ = Id2Item_ [idx.data (ListingRole::ParentID).toByteArray ()].ParentID_;
+				isfl->RefreshChildren (LastParentID_);
+			}
+		}
 		else if (!idx.data (ListingRole::IsDirectory).toBool ())
 			flOpenFile ();
-		else
-			ShowListItemsWithParent (idx.data (ListingRole::ID).toByteArray (),
-					OpenTrash_->isChecked ());
+		else if (auto isfl = qobject_cast<ISupportFileListings*> (isa->GetQObject ()))
+		{
+			LastParentID_ = idx.data (ListingRole::ID).toByteArray ();
+			isfl->RefreshChildren (LastParentID_);
+		}
 	}
 
 	void ManagerTab::handleAccountAdded (QObject *accObj)
@@ -618,24 +626,24 @@ namespace NetStoreManager
 				sender () != acc->GetQObject ())
 			return;
 
-		LastParentID_ = GetParentIDInListViewMode ();
-
-		Id2Item_.clear ();
 		for (auto item : items)
 			Id2Item_ [item.ID_] = item;
-
-		FillModel (acc);
 
 		Trash_->setIcon (Proxy_->GetIconThemeManager ()->GetIcon (GetTrashedFiles ().isEmpty () ?
 			"user-trash-full" :
 			"user-trash"));
 	}
 
+	void ManagerTab::handleListingUpdated (const QByteArray& parentId)
+	{
+		if (LastParentID_ == parentId || parentId.isEmpty ())
+			FillListModel ();
+	}
+
 	void ManagerTab::handleGotNewItem (const StorageItem& item, const QByteArray&)
 	{
 		Id2Item_ [item.ID_] = item;
 		LastParentID_ = GetParentIDInListViewMode ();
-		FillModel (GetCurrentAccount ());
 	}
 
 	void ManagerTab::handleFilesViewSectionResized (int index,
@@ -718,9 +726,7 @@ namespace NetStoreManager
 				DoNotNotifyUser |
 				DoNotSaveInHistory |
 				FromUserInitiated;
-		acc->Download (GetCurrentID (),
-				Ui_.FilesView_->currentIndex ().data ().toString (), tp, true,
-				true);
+		acc->Download (GetCurrentID (), {}, tp, true);
 	}
 
 	void ManagerTab::flCopy ()
@@ -769,6 +775,8 @@ namespace NetStoreManager
 			break;
 		case TransferOperation::Move:
 			sfl->Move (TransferedIDs_.second, GetParentIDInListViewMode ());
+			for (const auto& id : TransferedIDs_.second)
+				Id2Item_.remove (id);
 			break;
 		}
 		TransferedIDs_.second.clear ();
@@ -854,9 +862,34 @@ namespace NetStoreManager
 		if (!acc)
 			return;
 
-		acc->Download (GetCurrentID (),
-				Ui_.FilesView_->currentIndex ().data ().toString (),
-				OnlyDownload | FromUserInitiated);
+		const auto& rows = Ui_.FilesView_->selectionModel ()->selectedRows ();
+		if (rows.size () <= 1)
+		{
+			acc->Download (GetCurrentID (),
+					{},
+					OnlyDownload | FromUserInitiated,
+					false);
+			return;
+		}
+
+		const auto& defaultDir = XmlSettingsManager::Instance ()
+				.Property ("DirMultiDownload", QDir::homePath ()).toString ();
+		const auto& dir = QFileDialog::getExistingDirectory (this,
+				tr ("Download %n file(s)", 0, rows.size ()),
+				defaultDir);
+		if (dir.isEmpty ())
+			return;
+
+		XmlSettingsManager::Instance ().setProperty ("DirMultiDownload", dir);
+
+		for (auto row : rows)
+		{
+			row = row.sibling (row.row (), Columns::CName);
+			acc->Download (row.data (ListingRole::ID).toByteArray (),
+					dir,
+					OnlyDownload | FromUserInitiated | AutoAccept,
+					false);
+		}
 	}
 
 	void ManagerTab::flCopyUrl ()
@@ -867,7 +900,7 @@ namespace NetStoreManager
 
 		const QByteArray id = GetCurrentID ();
 		if (Id2Item_ [id].Shared_)
-			handleGotFileUrl (Id2Item_ [id].ShareUrl_);
+			handleGotFileUrl (Id2Item_ [id].ShareUrl_, id);
 		else
 			qobject_cast<ISupportFileListings*> (acc->GetQObject ())->RequestUrl (id);
 	}
@@ -997,11 +1030,14 @@ namespace NetStoreManager
 		}
 
 		Id2Item_.clear ();
+		LastParentID_.clear ();
 		RequestFileListings (acc);
 
 		auto sfl = qobject_cast<ISupportFileListings*> (acc->GetQObject ());
 		DeleteFile_->setVisible (sfl->GetListingOps () & ListingOp::Delete);
 		MoveToTrash_->setVisible (sfl->GetListingOps () & ListingOp::TrashSupporting);
+		UntrashFile_->setVisible (sfl->GetListingOps () & ListingOp::TrashSupporting);
+		Trash_->setVisible (sfl->GetListingOps () & ListingOp::TrashSupporting);
 
 		XmlSettingsManager::Instance ().setProperty ("LastActiveAccount",
 				acc->GetUniqueID ());
@@ -1033,7 +1069,6 @@ namespace NetStoreManager
 		}
 
 		LastParentID_ = GetParentIDInListViewMode ();
-		FillModel (GetCurrentAccount ());
 	}
 
 	void ManagerTab::handleFilterTextChanged (const QString& text)

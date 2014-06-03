@@ -115,6 +115,8 @@ namespace LMP
 		}
 
 		UpdateHeaders ();
+
+		ReemitEffectsList ();
 	}
 
 	IFilterElement* EffectsManager::RestoreFilter (const QList<EffectInfo>::const_iterator effectPos, const QByteArray& instanceId)
@@ -172,6 +174,39 @@ namespace LMP
 		XmlSettingsManager::Instance ().setProperty ("AddedFilters", QVariant::fromValue (data));
 	}
 
+	void EffectsManager::ReemitEffectsList ()
+	{
+		QStringList result;
+		for (int i = 0; i < Model_->rowCount (); ++i)
+			result << Model_->item (i)->text ();
+		emit effectsListChanged (result);
+	}
+
+	void EffectsManager::showEffectConfig (int row)
+	{
+		const auto filter = Filters_.value (row);
+		if (!filter)
+		{
+			qWarning () << Q_FUNC_INFO
+					<< "invalid row"
+					<< row
+					<< "of"
+					<< Filters_.size ();
+			return;
+		}
+
+		if (const auto conf = filter->GetConfigurator ())
+			conf->OpenDialog ();
+		else
+		{
+			const auto& name = Model_->item (row)->text ();
+			QMessageBox::warning (nullptr,
+					tr ("Effects configuration"),
+					tr ("Seems like %1 doesn't have any settings to configure.")
+						.arg ("<em>" + name + "</em>"));
+		}
+	}
+
 	void EffectsManager::addRequested (const QString&, const QVariantList& datas)
 	{
 		const auto& id = datas.value (0).toByteArray ();
@@ -192,6 +227,7 @@ namespace LMP
 
 		UpdateHeaders ();
 		SaveFilters ();
+		ReemitEffectsList ();
 	}
 
 	void EffectsManager::removeRequested (const QString&, const QModelIndexList& indexes)
@@ -217,31 +253,12 @@ namespace LMP
 
 		UpdateHeaders ();
 		SaveFilters ();
+		ReemitEffectsList ();
 	}
 
 	void EffectsManager::customButtonPressed (const QString&, const QByteArray&, int row)
 	{
-		const auto filter = Filters_.value (row);
-		if (!filter)
-		{
-			qWarning () << Q_FUNC_INFO
-					<< "invalid row"
-					<< row
-					<< "of"
-					<< Filters_.size ();
-			return;
-		}
-
-		if (const auto conf = filter->GetConfigurator ())
-			conf->OpenDialog ();
-		else
-		{
-			const auto& name = Model_->item (row)->text ();
-			QMessageBox::warning (nullptr,
-					tr ("Effects configuration"),
-					tr ("Seems like %1 doesn't have any settings to configure.")
-						.arg ("<em>" + name + "</em>"));
-		}
+		showEffectConfig (row);
 	}
 }
 }

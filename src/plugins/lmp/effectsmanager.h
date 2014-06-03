@@ -82,11 +82,17 @@ namespace LMP
 		IFilterElement* RestoreFilter (const QList<EffectInfo>::const_iterator, const QByteArray&);
 		void UpdateHeaders ();
 		void SaveFilters () const;
+
+		void ReemitEffectsList ();
 	public slots:
+		void showEffectConfig (int);
+
 		void addRequested (const QString&, const QVariantList&);
 		void removeRequested (const QString&, const QModelIndexList&);
 
 		void customButtonPressed (const QString&, const QByteArray&, int);
+	signals:
+		void effectsListChanged (const QStringList&);
 	};
 }
 }
