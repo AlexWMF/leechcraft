@@ -41,7 +41,7 @@
 #include "accountthreadworker.h"
 #include "storage.h"
 #include "accountfoldermanager.h"
-#include "mailmodelmanager.h"
+#include "mailmodel.h"
 
 namespace LeechCraft
 {
@@ -64,7 +64,7 @@ namespace Snails
 	, APOPFail_ (false)
 	, FolderManager_ (new AccountFolderManager (this))
 	, FoldersModel_ (new QStandardItemModel (this))
-	, MailModelMgr_ (new MailModelManager (this))
+	, MailModel_ (new MailModel (this))
 	{
 		Thread_->start (QThread::LowPriority);
 	}
@@ -109,7 +109,7 @@ namespace Snails
 
 	QAbstractItemModel* Account::GetMailModel () const
 	{
-		return MailModelMgr_->GetModel ();
+		return MailModel_;
 	}
 
 	QAbstractItemModel* Account::GetFoldersModel () const
@@ -119,28 +119,28 @@ namespace Snails
 
 	void Account::ShowFolder (const QModelIndex& idx)
 	{
-		MailModelMgr_->clear ();
+		MailModel_->Clear ();
 
 		const QStringList& path = idx.data (FoldersRole::Path).toStringList ();
 		if (path.isEmpty ())
 			return;
 
-		MailModelMgr_->SetCurrentFolder (path);
+		MailModel_->SetFolder (path);
 
 		QList<Message_ptr> messages;
 		const auto& ids = Core::Instance ().GetStorage ()->LoadIDs (this, path);
-		Q_FOREACH (const auto& id, ids)
+		for (const auto& id : ids)
 			messages << Core::Instance ().GetStorage ()->LoadMessage (this, id);
 
-		MailModelMgr_->appendMessages (messages);
+		MailModel_->Append (messages);
 
 		Synchronize (path);
 	}
 
 	void Account::Synchronize (Account::FetchFlags flags)
 	{
-		MailModelMgr_->clear ();
-		MailModelMgr_->SetCurrentFolder (QStringList ("INBOX"));
+		MailModel_->Clear ();
+		MailModel_->SetFolder ({ "INBOX" });
 
 		auto folders = FolderManager_->GetSyncFolders ();
 		if (folders.isEmpty ())
@@ -195,9 +195,9 @@ namespace Snails
 				Q_ARG (QString, path));
 	}
 
-	void Account::UpdateReadStatus (const QByteArray& id, bool isRead)
+	void Account::Update (const Message_ptr& message)
 	{
-		MailModelMgr_->UpdateReadStatus (id, isRead);
+		MailModel_->Update (message);
 	}
 
 	QByteArray Account::Serialize () const
@@ -575,7 +575,7 @@ namespace Snails
 		Core::Instance ().GetStorage ()->SaveMessages (this, messages);
 		emit mailChanged ();
 
-		MailModelMgr_->appendMessages (messages);
+		MailModel_->Append (messages);
 	}
 
 	void Account::handleGotUpdatedMessages (QList<Message_ptr> messages)
@@ -583,7 +583,7 @@ namespace Snails
 		Core::Instance ().GetStorage ()->SaveMessages (this, messages);
 		emit mailChanged ();
 
-		MailModelMgr_->appendMessages (messages);
+		MailModel_->Append (messages);
 	}
 
 	void Account::handleGotOtherMessages (QList<QByteArray> ids, QStringList folder)
@@ -593,7 +593,7 @@ namespace Snails
 		Q_FOREACH (auto id, ids)
 			msgs << Core::Instance ().GetStorage ()->LoadMessage (this, id);
 
-		MailModelMgr_->appendMessages (msgs);
+		MailModel_->Append (msgs);
 	}
 
 	namespace

@@ -1,19 +1,6 @@
-if (NOT QT_USE_FILE)
-	cmake_minimum_required (VERSION 2.6)
-	if (COMMAND cmake_policy)
-		cmake_policy (SET CMP0003 NEW)
-	endif ()
-
-	project (leechcraft_snails)
-
-	if (NOT CMAKE_MODULE_PATH)
-		set (CMAKE_MODULE_PATH "/usr/local/share/leechcraft/cmake;/usr/share/leechcraft/cmake")
-	endif ()
-
-	find_package (Boost REQUIRED)
-	find_package (Qt4 REQUIRED)
-	find_package (LeechCraft REQUIRED)
-endif ()
+cmake_minimum_required (VERSION 2.8)
+project (leechcraft_snails)
+include (InitLCPlugin OPTIONAL)
 
 set (CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -22,8 +9,9 @@ if (MAGIC_FOUND)
 	add_definitions (-DHAVE_MAGIC)
 endif ()
 
-set (QT_USE_QTWEBKIT TRUE)
+set (QT_USE_QTNETWORK TRUE)
 set (QT_USE_QTSQL TRUE)
+set (QT_USE_QTWEBKIT TRUE)
 
 include (${QT_USE_FILE})
 include_directories (
@@ -53,8 +41,8 @@ set (SRCS
 	attdescr.cpp
 	vmimeconversions.cpp
 	outputiodevadapter.cpp
-	mailmodelmanager.cpp
 	common.cpp
+	mailmodel.cpp
 	)
 set (FORMS
 	mailtab.ui
@@ -82,4 +70,3 @@ target_link_libraries (leechcraft_snails
 install (TARGETS leechcraft_snails DESTINATION ${LC_PLUGINS_DEST})
 install (FILES snailssettings.xml DESTINATION ${LC_SETTINGS_DEST})
 install (DIRECTORY share/snails DESTINATION ${LC_SHARE_DEST})
-install (FILES ${COMPILED_TRANSLATIONS} DESTINATION ${LC_TRANSLATIONS_DEST})

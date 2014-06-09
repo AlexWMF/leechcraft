@@ -37,6 +37,7 @@
 #include <QShortcut>
 #include <QFontDialog>
 #include <QUrl>
+#include <QProcessEnvironment>
 #include <QtDebug>
 #include <qtermwidget.h>
 #include <util/sll/slotclosure.h>
@@ -55,7 +56,7 @@ namespace Eleeminator
 	, TC_ (tc)
 	, ParentPlugin_ { plugin }
 	, Toolbar_ { new QToolBar { tr ("Terminal toolbar") } }
-	, Term_ { new QTermWidget { true } }
+	, Term_ { new QTermWidget { false } }
 	{
 		auto lay = new QVBoxLayout;
 		lay->setContentsMargins (0, 0, 0, 0);
@@ -66,6 +67,18 @@ namespace Eleeminator
 		Term_->setFlowControlEnabled (true);
 		Term_->setFlowControlWarningEnabled (true);
 		Term_->setScrollBarPosition (QTermWidget::ScrollBarRight);
+
+		auto systemEnv = QProcessEnvironment::systemEnvironment ();
+		if (systemEnv.value ("TERM") != "xterm")
+			systemEnv.remove ("TERM");
+		if (!systemEnv.contains ("TERM"))
+		{
+			systemEnv.insert ("TERM", "xterm");
+			Term_->setEnvironment (systemEnv.toStringList ());
+		}
+
+		Term_->startShellProgram ();
+
 		connect (Term_,
 				SIGNAL (finished ()),
 				this,

@@ -29,54 +29,52 @@
 
 #pragma once
 
-#include <QString>
-#include <QPair>
-#include <vmime/mailbox.hpp>
-#include <vmime/charsetConverter.hpp>
-#include <vmime/utility/outputStreamStringAdapter.hpp>
+#include <QStringList>
+#include <QAbstractItemModel>
+#include <QList>
+#include "message.h"
 
 namespace LeechCraft
 {
 namespace Snails
 {
-	template<typename T>
-	QString Stringize (const T& t, const vmime::charset& source)
+	class MailModel : public QAbstractItemModel
 	{
-		vmime::string stringized;
-		vmime::utility::outputStreamStringAdapter out (stringized);
-		t->extract (out);
-		out.flush ();
+		const QStringList Headers_;
 
-		const auto& converter = vmime::charsetConverter::create (source, vmime::charsets::UTF_8);
-		vmime::string outStr;
-		converter->convert (stringized, outStr);
+		QStringList Folder_;
 
-		return QString::fromUtf8 (outStr.c_str ());
-	}
+		QList<Message_ptr> Messages_;
 
-	template<typename T>
-	QString Stringize (const T& t)
-	{
-		vmime::string str;
-		vmime::utility::outputStreamStringAdapter out (str);
+		enum class Column
+		{
+			From,
+			Subject,
+			Date,
+			Size
+		};
+	public:
+		enum MailRole
+		{
+			ID = Qt::UserRole + 1,
+			Sort,
+			ReadStatus
+		};
 
-		t->extract (out);
+		MailModel (QObject* = 0);
 
-		return QString::fromUtf8 (str.c_str ());
-	}
+		QVariant headerData (int, Qt::Orientation, int) const;
+		int columnCount (const QModelIndex& = {}) const;
+		QVariant data (const QModelIndex&, int) const;
+		QModelIndex index (int, int, const QModelIndex& = {}) const;
+		QModelIndex parent (const QModelIndex&) const;
+		int rowCount (const QModelIndex& = {}) const;
 
-	template<typename T>
-	QString StringizeCT (const T& w)
-	{
-		return QString::fromUtf8 (w.getConvertedText (vmime::charsets::UTF_8).c_str ());
-	}
+		void SetFolder (const QStringList&);
 
-	inline QPair<QString, QString> Mailbox2Strings (const vmime::shared_ptr<const vmime::mailbox>& mbox)
-	{
-		return {
-					StringizeCT (mbox->getName ()),
-					QString::fromUtf8 (mbox->getEmail ().toString ().c_str ())
-				};
-	}
+		void Clear ();
+		void Append (QList<Message_ptr>);
+		bool Update (const Message_ptr&);
+	};
 }
 }

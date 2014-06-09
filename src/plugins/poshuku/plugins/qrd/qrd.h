@@ -30,53 +30,46 @@
 #pragma once
 
 #include <QObject>
-#include <QHash>
-#include "message.h"
+#include <interfaces/iinfo.h>
+#include <interfaces/iplugin2.h>
+#include <interfaces/core/ihookproxy.h>
+#include <interfaces/poshuku/poshukutypes.h>
 
-class QAbstractItemModel;
-class QStandardItemModel;
-class QStandardItem;
+class QWebHitTestResult;
+class QWebView;
 
 namespace LeechCraft
 {
-namespace Snails
+namespace Poshuku
 {
-	class MailModelManager : public QObject
+namespace QRd
+{
+	class Plugin : public QObject
+				 , public IInfo
+				 , public IPlugin2
 	{
 		Q_OBJECT
-
-		QStandardItemModel *Model_;
-		QHash<QByteArray, QStandardItem*> MailID2Item_;
-
-		QStringList CurrentFolder_;
+		Q_INTERFACES (IInfo IPlugin2)
 	public:
-		enum MailColumns
-		{
-			From,
-			Subj,
-			Date,
-			Size,
-			Max
-		};
+		void Init (ICoreProxy_ptr);
+		void SecondInit ();
+		void Release ();
+		QByteArray GetUniqueID () const;
+		QString GetName () const;
+		QString GetInfo () const;
+		QIcon GetIcon () const;
 
-		enum MailRole
-		{
-			ID = Qt::UserRole + 1,
-			Sort,
-			ReadStatus
-		};
-
-		MailModelManager (QObject* = 0);
-
-		QAbstractItemModel* GetModel () const;
-		void UpdateReadStatus (const QByteArray&, bool);
-
-		void SetCurrentFolder (const QStringList&);
+		QSet<QByteArray> GetPluginClasses () const;
 	public slots:
-		void clear ();
-
-		void appendMessages (const QList<Message_ptr>&);
-		void replaceMessages (const QList<Message_ptr>&);
+		void hookWebViewContextMenu (LeechCraft::IHookProxy_ptr proxy,
+				QWebView *view,
+				QContextMenuEvent *event,
+				const QWebHitTestResult& hitTestResult,
+				QMenu *menu,
+				WebViewCtxMenuStage menuBuildStage);
+	private slots:
+		void genQR ();
 	};
+}
 }
 }

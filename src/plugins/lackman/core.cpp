@@ -72,6 +72,15 @@ namespace LackMan
 		Relation2comparator [Dependency::E] = [] (QString l, QString r) { return r == l; };
 		Relation2comparator [Dependency::LE] = [] (QString l, QString r) { return !Relation2comparator [Dependency::G] (l, r); };
 
+		connect (PendingManager_,
+				SIGNAL (packageUpdateToggled (int, bool)),
+				PackagesModel_,
+				SLOT (handlePackageUpdateToggled (int)));
+		connect (PendingManager_,
+				SIGNAL (packageInstallRemoveToggled (int, bool)),
+				PackagesModel_,
+				SLOT (handlePackageInstallRemoveToggled (int)));
+
 		connect (Storage_,
 				SIGNAL (packageRemoved (int)),
 				this,
@@ -155,8 +164,8 @@ namespace LackMan
 	{
 		ReadSettings ();
 
-		auto unm = new UpdatesNotificationManager (PackagesModel_, Proxy_, this);
-		connect (unm,
+		UpdatesNotificationManager_ = new UpdatesNotificationManager (PackagesModel_, Proxy_, this);
+		connect (UpdatesNotificationManager_,
 				SIGNAL (openLackmanRequested ()),
 				this,
 				SIGNAL (openLackmanRequested ()));
@@ -195,6 +204,11 @@ namespace LackMan
 	QAbstractItemModel* Core::GetRepositoryModel () const
 	{
 		return ReposModel_;
+	}
+
+	UpdatesNotificationManager* Core::GetUpdatesNotificationManager () const
+	{
+		return UpdatesNotificationManager_;
 	}
 
 	DependencyList Core::GetDependencies (int packageId) const
@@ -941,11 +955,9 @@ namespace LackMan
 		for (int i = 0, rows = PackagesModel_->rowCount ();
 				i < rows; ++i)
 		{
-			QModelIndex index = PackagesModel_->index (i, 0);
-			int packageId = PackagesModel_->
-					data (index, PackagesModel::PMRPackageID).toInt ();
-			bool isUpgr = PackagesModel_->
-					data (index, PackagesModel::PMRUpgradable).toBool ();
+			const auto& index = PackagesModel_->index (i, 0);
+			int packageId = PackagesModel_->data (index, PackagesModel::PMRPackageID).toInt ();
+			bool isUpgr = PackagesModel_->data (index, PackagesModel::PMRUpgradable).toBool ();
 
 			if (isUpgr)
 				PendingManager_->ToggleUpdate (packageId, true);

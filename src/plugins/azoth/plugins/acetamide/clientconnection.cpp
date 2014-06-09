@@ -205,7 +205,7 @@ namespace Acetamide
 
 	void ClientConnection::DisconnectFromAll ()
 	{
-		Q_FOREACH (auto ish, ServerHandlers_.values ())
+		for (auto ish : ServerHandlers_)
 			ish->SendQuit ();
 	}
 
@@ -218,7 +218,7 @@ namespace Acetamide
 	void ClientConnection::SetConsoleEnabled (bool enabled)
 	{
 		IsConsoleEnabled_ = enabled;
-		Q_FOREACH (auto srv, ServerHandlers_.values ())
+		for (auto srv : ServerHandlers_)
 		{
 			srv->SetConsoleEnabled (enabled);
 			if (enabled)
@@ -287,10 +287,11 @@ namespace Acetamide
 		if (!ServerHandlers_.contains (serverId))
 			return;
 
-		ServerHandlers_ [serverId]->DisconnectFromServer ();
-		Account_->handleEntryRemoved (ServerHandlers_ [serverId]->
-				GetCLEntry ());
-		ServerHandlers_.take (serverId)->deleteLater ();
+		const auto entry = ServerHandlers_.take (serverId);
+		Account_->handleEntryRemoved (entry->GetCLEntry ());
+		entry->DisconnectFromServer ();
+		entry->deleteLater ();
+
 		if (!ServerHandlers_.count ())
 			Account_->SetState (EntryStatus (SOffline,
 					QString ()));

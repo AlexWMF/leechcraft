@@ -32,6 +32,7 @@
 #include <QUrl>
 #include <QFile>
 #include <QTimer>
+#include <QSslSocket>
 #include <QtDebug>
 #include <vmime/security/defaultAuthenticator.hpp>
 #include <vmime/security/cert/defaultCertificateVerifier.hpp>
@@ -47,6 +48,7 @@
 #include <vmime/stringContentHandler.hpp>
 #include <vmime/fileAttachment.hpp>
 #include <util/util.h>
+#include <util/xpc/util.h>
 #include "message.h"
 #include "account.h"
 #include "core.h"
@@ -108,31 +110,6 @@ namespace Snails
 
 			return pass.toUtf8 ().constData ();
 		}
-
-		class CertVerifier : public vmime::security::cert::defaultCertificateVerifier
-		{
-			static std::vector<vmime::shared_ptr<vmime::security::cert::X509Certificate>> TrustedCerts_;
-		public:
-			void verify (vmime::shared_ptr<vmime::security::cert::certificateChain> chain)
-			{
-				try
-				{
-					setX509TrustedCerts (TrustedCerts_);
-
-					defaultCertificateVerifier::verify (chain);
-				}
-				catch (vmime::exceptions::certificate_verification_exception&)
-				{
-					auto cert = chain->getAt (0);
-
-					if (cert->getType() == "X.509")
-						TrustedCerts_.push_back (cert.dynamicCast
-								<vmime::security::cert::X509Certificate>());
-				}
-			}
-		};
-
-		std::vector<vmime::shared_ptr<vmime::security::cert::X509Certificate>> CertVerifier::TrustedCerts_;
 	}
 
 	class TimerGuard
@@ -155,14 +132,23 @@ namespace Snails
 
 	AccountThreadWorker::AccountThreadWorker (Account *parent)
 	: A_ (parent)
+	, Session_ (new vmime::net::session ())
 	, DisconnectTimer_ (new QTimer (this))
+	, CertVerifier_ (vmime::make_shared<vmime::security::cert::defaultCertificateVerifier> ())
 	{
-		Session_ = vmime::create<vmime::net::session> ();
-
 		connect (DisconnectTimer_,
 				SIGNAL (timeout ()),
 				this,
 				SLOT (timeoutDisconnect ()));
+
+		std::vector<boost::shared_ptr<vmime::security::cert::X509Certificate>> vCerts;
+		for (const auto& sysCert : QSslSocket::systemCaCertificates ())
+		{
+			const auto& der = sysCert.toDer ();
+			const auto bytes = reinterpret_cast<const vmime::byte_t*> (der.constData ());
+			vCerts.push_back (vmime::security::cert::X509Certificate::import (bytes, der.size ()));
+		}
+		CertVerifier_->setX509RootCAs (vCerts);
 	}
 
 	vmime::shared_ptr<vmime::net::store> AccountThreadWorker::MakeStore ()
@@ -178,7 +164,7 @@ namespace Snails
 				Q_ARG (QString*, &url));
 
 		auto st = Session_->getStore (vmime::utility::url (url.toUtf8 ().constData ()));
-		st->setCertificateVerifier (vmime::create<CertVerifier> ());
+		st->setCertificateVerifier (CertVerifier_);
 
 		if (A_->UseTLS_)
 		{
@@ -232,7 +218,7 @@ namespace Snails
 			trp->setProperty ("auth.password", password.toUtf8 ().constData ());
 		}
 		trp->setProperty ("server.port", A_->OutPort_);
-		trp->setCertificateVerifier (vmime::create<CertVerifier> ());
+		trp->setCertificateVerifier (CertVerifier_);
 
 		if (A_->OutSecurity_ == Account::SecurityType::TLS)
 		{
@@ -277,10 +263,10 @@ namespace Snails
 
 	Message_ptr AccountThreadWorker::FromHeaders (const vmime::shared_ptr<vmime::net::message>& message) const
 	{
-		auto utf8cs = vmime::charset ("utf-8");
+		const auto& utf8cs = vmime::charset { vmime::charsets::UTF_8 };
 
 		Message_ptr msg (new Message);
-		msg->SetID (message->getUniqueId ().c_str ());
+		msg->SetID (static_cast<vmime::string> (message->getUID ()).c_str ());
 		msg->SetSize (message->getSize ());
 
 		if (message->getFlags () & vmime::net::message::FLAG_SEEN)
@@ -290,21 +276,26 @@ namespace Snails
 
 		try
 		{
-			auto mbox = header->From ()->getValue ().dynamicCast<const vmime::mailbox> ();
-			msg->AddAddress (Message::Address::From, Mailbox2Strings (mbox));
+			if (const auto& from = header->From ())
+			{
+				const auto& mboxVal = from->getValue ();
+				const auto& mbox = vmime::dynamicCast<const vmime::mailbox> (mboxVal);
+				msg->AddAddress (Message::Address::From, Mailbox2Strings (mbox));
+			}
+			else
+				qWarning () << "no 'from' data";
 		}
-		catch (const vmime::exceptions::no_such_field& nsf)
+		catch (const vmime::exceptions::no_such_field&)
 		{
 			qWarning () << "no 'from' data";
 		}
 
 		try
 		{
-			auto val = header->To ()->getValue ();
-			auto alist = val.dynamicCast<const vmime::mailboxList> ();
-			if (alist)
+			const auto& val = header->To ()->getValue ();
+			if (const auto& alist = vmime::dynamicCast<const vmime::addressList> (val))
 			{
-				const auto& vec = alist->getMailboxList ();
+				const auto& vec = alist->toMailboxList ()->getMailboxList ();
 
 				Message::Addresses_t to;
 				std::transform (vec.begin (), vec.end (), std::back_inserter (to),
@@ -321,8 +312,9 @@ namespace Snails
 
 		try
 		{
-			auto origDate = header->Date ()->getValue ().dynamicCast<const vmime::datetime> ();
-			auto date = vmime::utility::datetimeUtils::toUniversalTime (*origDate);
+			const auto& origDateVal = header->Date ()->getValue ();
+			const auto& origDate = vmime::dynamicCast<const vmime::datetime> (origDateVal);
+			const auto& date = vmime::utility::datetimeUtils::toUniversalTime (*origDate);
 			QDate qdate (date.getYear (), date.getMonth (), date.getDay ());
 			QTime time (date.getHour (), date.getMinute (), date.getSecond ());
 			msg->SetDate (QDateTime (qdate, time, Qt::UTC));
@@ -333,9 +325,9 @@ namespace Snails
 
 		try
 		{
-			auto str = header->Subject ()->getValue ()
-					.dynamicCast<const vmime::text> ()->getConvertedText (utf8cs);
-			msg->SetSubject (QString::fromUtf8 (str.c_str ()));
+			const auto& strVal = header->Subject ()->getValue ();
+			const auto& str = vmime::dynamicCast<const vmime::text> (strVal);
+			msg->SetSubject (QString::fromUtf8 (str->getConvertedText (utf8cs).c_str ()));
 		}
 		catch (const vmime::exceptions::no_such_field&)
 		{
@@ -358,15 +350,15 @@ namespace Snails
 		auto folder = store->getDefaultFolder ();
 		folder->open (vmime::net::folder::MODE_READ_WRITE);
 
-		auto messages = folder->getMessages ();
+		auto messages = folder->getMessages (vmime::net::messageSet::byNumber (1, -1));
 		if (!messages.size ())
 			return;
 
 		qDebug () << "know about" << messages.size () << "messages";
-		int desiredFlags = vmime::net::folder::FETCH_FLAGS |
-					vmime::net::folder::FETCH_SIZE |
-					vmime::net::folder::FETCH_UID |
-					vmime::net::folder::FETCH_ENVELOPE;
+		auto desiredFlags = vmime::net::fetchAttributes::FLAGS |
+					vmime::net::fetchAttributes::SIZE |
+					vmime::net::fetchAttributes::UID |
+					vmime::net::fetchAttributes::ENVELOPE;
 		desiredFlags &= folder->getFetchCapabilities ();
 
 		qDebug () << "folder supports" << folder->getFetchCapabilities ()
@@ -389,7 +381,7 @@ namespace Snails
 
 		if (fetchFlags & Account::FetchNew)
 		{
-			if (folder->getFetchCapabilities () & vmime::net::folder::FETCH_FLAGS)
+			if (folder->getFetchCapabilities () & vmime::net::fetchAttributes::FLAGS)
 			{
 				auto pos = std::remove_if (messages.begin (), messages.end (),
 						[] (decltype (messages.front ()) msg) { return msg->getFlags () & vmime::net::message::FLAG_SEEN; });
@@ -410,32 +402,57 @@ namespace Snails
 	void AccountThreadWorker::FetchMessagesIMAP (Account::FetchFlags fetchFlags,
 			const QList<QStringList>& origFolders, vmime::shared_ptr<vmime::net::store> store)
 	{
-		Q_FOREACH (const auto& folder, origFolders)
+		for (const auto& folder : origFolders)
 		{
-			auto netFolder = GetFolder (folder, vmime::net::folder::MODE_READ_WRITE);
+			const auto& netFolder = GetFolder (folder, vmime::net::folder::MODE_READ_WRITE);
 			FetchMessagesInFolder (folder, netFolder);
 		}
 	}
 
 	void AccountThreadWorker::FetchMessagesInFolder (const QStringList& folderName,
-			vmime::utility::ref<vmime::net::folder> folder)
+			vmime::shared_ptr<vmime::net::folder> folder)
 	{
-		auto messages = folder->getMessages ();
+		qDebug () << Q_FUNC_INFO << folderName << folder.get ();
+		const auto count = folder->getMessageCount ();
+		std::vector<vmime::shared_ptr<vmime::net::message>> messages;
+		messages.reserve (count);
+		const auto chunkSize = 100;
+		for (int i = 0; i < count; i += chunkSize)
+		{
+			const auto endVal = i + chunkSize;
+			const auto& set = vmime::net::messageSet::byNumber (i + 1, std::min (count, endVal));
+			try
+			{
+				const auto& theseMessages = folder->getMessages (set);
+				std::move (theseMessages.begin (), theseMessages.end (), std::back_inserter (messages));
+			}
+			catch (const std::exception& e)
+			{
+				qWarning () << Q_FUNC_INFO
+						<< "cannot get messages from"
+						<< i + 1
+						<< "to"
+						<< endVal
+						<< "because:"
+						<< e.what ();
+				return;
+			}
+		}
+
 		if (!messages.size ())
 			return;
 
-		const int desiredFlags = vmime::net::folder::FETCH_FLAGS |
-					vmime::net::folder::FETCH_SIZE |
-					vmime::net::folder::FETCH_UID |
-					vmime::net::folder::FETCH_ENVELOPE;
+		const int desiredFlags = vmime::net::fetchAttributes::FLAGS |
+					vmime::net::fetchAttributes::SIZE |
+					vmime::net::fetchAttributes::UID |
+					vmime::net::fetchAttributes::ENVELOPE;
 
 		try
 		{
 			const auto& context = tr ("Fetching headers for %1")
 					.arg (A_->GetName ());
 
-			folder->fetchMessages (messages,
-					desiredFlags, MkPgListener (context));
+			folder->fetchMessages (messages, desiredFlags, MkPgListener (context));
 		}
 		catch (const vmime::exceptions::operation_not_supported& ons)
 		{
@@ -444,8 +461,15 @@ namespace Snails
 					<< ons.what ();
 			return;
 		}
+		catch (const std::exception& e)
+		{
+			qWarning () << Q_FUNC_INFO
+					<< "generally something bad happened:"
+					<< e.what ();
+			return;
+		}
 
-		const QSet<QByteArray>& existing = Core::Instance ().GetStorage ()->LoadIDs (A_);
+		const auto& existing = Core::Instance ().GetStorage ()->LoadIDs (A_);
 
 		QList<Message_ptr> newMessages;
 		std::transform (messages.begin (), messages.end (), std::back_inserter (newMessages),
@@ -519,7 +543,7 @@ namespace Snails
 
 				if (tp->getType ().getSubType () == vmime::mediaTypes::TEXT_HTML)
 				{
-					auto htp = tp.dynamicCast<const vmime::htmlTextPart> ();
+					auto htp = vmime::dynamicCast<const vmime::htmlTextPart> (tp);
 					html = Stringize (htp->getText (), htp->getCharset ());
 					plain = Stringize (htp->getPlainText (), htp->getCharset ());
 				}
@@ -555,7 +579,7 @@ namespace Snails
 		{
 			QStringList pathList;
 			const auto& path = folder->getFullPath ();
-			for (int i = 0; i < path.getSize (); ++i)
+			for (size_t i = 0; i < path.getSize (); ++i)
 				pathList << StringizeCT (path.getComponentAt (i));
 
 			paths << pathList;
@@ -564,7 +588,7 @@ namespace Snails
 		emit gotFolders (paths);
 	}
 
-	QList<Message_ptr> AccountThreadWorker::FetchFullMessages (const std::vector<vmime::utility::ref<vmime::net::message>>& messages)
+	QList<Message_ptr> AccountThreadWorker::FetchFullMessages (const std::vector<vmime::shared_ptr<vmime::net::message>>& messages)
 	{
 		const auto& context = tr ("Fetching messages for %1")
 					.arg (A_->GetName ());
@@ -638,36 +662,45 @@ namespace Snails
 		TimerGuard g (DisconnectTimer_);
 
 		const QByteArray& sid = origMsg->GetID ();
-		vmime::string id (sid.constData ());
-		qDebug () << Q_FUNC_INFO << sid.toHex ();
 		auto folder = GetFolder (origMsg->GetFolders ().value (0), vmime::net::folder::MODE_READ_WRITE);
 
-		auto messages = folder->getMessages ();
-		folder->fetchMessages (messages, vmime::net::folder::FETCH_UID);
-
-		auto pos = std::find_if (messages.begin (), messages.end (),
-				[id] (const vmime::shared_ptr<vmime::net::message>& message) { return message->getUniqueId () == id; });
-		if (pos == messages.end ())
+		try
 		{
-			Q_FOREACH (auto msg, messages)
-				qWarning () << QByteArray (msg->getUniqueId ().c_str ()).toHex ();
+			const auto& set = vmime::net::messageSet::byUID (sid.constData ());
+			const auto attrs = vmime::net::fetchAttributes::FLAGS |
+					vmime::net::fetchAttributes::UID |
+					vmime::net::fetchAttributes::CONTENT_INFO |
+					vmime::net::fetchAttributes::STRUCTURE |
+					vmime::net::fetchAttributes::FULL_HEADER;
+			const auto& messages = folder->getAndFetchMessages (set, attrs);
+			if (messages.empty ())
+			{
+				qWarning () << Q_FUNC_INFO
+						<< "message with ID"
+						<< sid.toHex ()
+						<< "not found in"
+						<< messages.size ();
+				return;
+			}
+
+			FullifyHeaderMessage (origMsg, FromNetMessage (messages.front ()));
+		}
+		catch (const vmime::exceptions::invalid_response& resp)
+		{
 			qWarning () << Q_FUNC_INFO
-					<< "message with ID"
-					<< sid.toHex ()
-					<< "not found in"
-					<< messages.size ();
+					<< "invalid response"
+					<< resp.response ().c_str ()
+					<< "to command"
+					<< resp.command ().c_str ();
 			return;
 		}
-
-		qDebug () << "found corresponding message, fullifying...";
-
-		folder->fetchMessage (*pos, vmime::net::folder::FETCH_FLAGS |
-					vmime::net::folder::FETCH_UID |
-					vmime::net::folder::FETCH_CONTENT_INFO |
-					vmime::net::folder::FETCH_STRUCTURE |
-					vmime::net::folder::FETCH_FULL_HEADER);
-
-		FullifyHeaderMessage (origMsg, FromNetMessage (*pos));
+		catch (const std::exception& e)
+		{
+			qWarning () << Q_FUNC_INFO
+					<< "failed to fetch the message:"
+					<< e.what ();
+			return;
+		}
 
 		qDebug () << "done";
 
@@ -683,7 +716,7 @@ namespace Snails
 		TimerGuard g (DisconnectTimer_);
 
 		const auto& msgId = msg->GetID ();
-		vmime::string id (msgId.constData ());
+		const vmime::string id { msgId.constData () };
 		qDebug () << Q_FUNC_INFO << msgId.toHex ();
 
 		auto store = MakeStore ();
@@ -691,15 +724,18 @@ namespace Snails
 		auto folder = store->getFolder (Folder2Path (msg->GetFolders ().value (0)));
 		folder->open (vmime::net::folder::MODE_READ_WRITE);
 
-		auto messages = folder->getMessages ();
-		folder->fetchMessages (messages, vmime::net::folder::FETCH_UID);
+		auto messages = folder->getMessages (vmime::net::messageSet::byNumber (1, -1));
+		folder->fetchMessages (messages, vmime::net::fetchAttributes::UID);
 
 		auto pos = std::find_if (messages.begin (), messages.end (),
-				[id] (const vmime::shared_ptr<vmime::net::message>& message) { return message->getUniqueId () == id; });
+				[&id] (const vmime::shared_ptr<vmime::net::message>& message)
+				{
+					return message->getUID () == id;
+				});
 		if (pos == messages.end ())
 		{
-			Q_FOREACH (auto msg, messages)
-				qWarning () << QByteArray (msg->getUniqueId ().c_str ()).toHex ();
+			for (const auto& msg : messages)
+				qWarning () << QByteArray (static_cast<vmime::string> (msg->getUID ()).c_str ()).toHex ();
 			qWarning () << Q_FUNC_INFO
 					<< "message with ID"
 					<< msgId.toHex ()
@@ -768,7 +804,10 @@ namespace Snails
 		vmime::addressList recips;
 		const auto& tos = msg->GetAddresses (Message::Address::To);
 		std::for_each (tos.begin (), tos.end (),
-				[&recips] (decltype (tos.front ()) pair) { recips.appendAddress (vmime::create<vmime::mailbox> (FromPair (pair))); });
+				[&recips] (decltype (tos.front ()) pair)
+				{
+					recips.appendAddress (vmime::make_shared<vmime::mailbox> (FromPair (pair)));
+				});
 		mb.setRecipients (recips);
 
 		const QString& html = msg->GetHTMLBody ();
@@ -776,15 +815,15 @@ namespace Snails
 		if (html.isEmpty ())
 		{
 			mb.getTextPart ()->setCharset (vmime::charsets::UTF_8);
-			mb.getTextPart ()->setText (vmime::create<vmime::stringContentHandler> (msg->GetBody ().toUtf8 ().constData ()));
+			mb.getTextPart ()->setText (vmime::make_shared<vmime::stringContentHandler> (msg->GetBody ().toUtf8 ().constData ()));
 		}
 		else
 		{
 			mb.constructTextPart ({ vmime::mediaTypes::TEXT, vmime::mediaTypes::TEXT_HTML });
-			auto textPart = mb.getTextPart ().dynamicCast<vmime::htmlTextPart> ();
+			auto textPart = vmime::dynamicCast<vmime::htmlTextPart> (mb.getTextPart ());
 			textPart->setCharset (vmime::charsets::UTF_8);
-			textPart->setText (vmime::create<vmime::stringContentHandler> (html.toUtf8 ().constData ()));
-			textPart->setPlainText (vmime::create<vmime::stringContentHandler> (msg->GetBody ().toUtf8 ().constData ()));
+			textPart->setText (vmime::make_shared<vmime::stringContentHandler> (html.toUtf8 ().constData ()));
+			textPart->setPlainText (vmime::make_shared<vmime::stringContentHandler> (msg->GetBody ().toUtf8 ().constData ()));
 		}
 
 		Q_FOREACH (const AttDescr& descr, msg->GetAttachments ())
@@ -792,7 +831,7 @@ namespace Snails
 			try
 			{
 				const QFileInfo fi (descr.GetName ());
-				auto att = vmime::create<vmime::fileAttachment> (descr.GetName ().toUtf8 ().constData (),
+				auto att = vmime::make_shared<vmime::fileAttachment> (descr.GetName ().toUtf8 ().constData (),
 						vmime::mediaType (descr.GetType ().constData (), descr.GetSubType ().constData ()),
 						vmime::text (descr.GetDescr ().toUtf8 ().constData ()));
 				att->getFileInfo ().setFilename (fi.fileName ().toUtf8 ().constData ());

@@ -17,13 +17,16 @@ set (POTORCHU_SRCS
 	viswidget.cpp
 	visscene.cpp
 	)
+set (POTORCHU_RESOURCES lmppotorchuresources.qrc)
 
-#CreateTrs ("lmp_potorchu" "en;ru_RU" POTORCHU_COMPILED_TRANSLATIONS)
+CreateTrs ("lmp_potorchu" "en;ru_RU" POTORCHU_COMPILED_TRANSLATIONS)
 CreateTrsUpTarget("lmp_potorchu" "en;ru_RU" "${POTORCHU_SRCS}" "${POTORCHU_FORMS}" "")
+QT4_ADD_RESOURCES (POTORCHU_RCCS ${POTORCHU_RESOURCES})
 
 add_library (leechcraft_lmp_potorchu SHARED
 	${POTORCHU_COMPILED_TRANSLATIONS}
 	${POTORCHU_SRCS}
+	${POTORCHU_RCCS}
 	)
 target_link_libraries (leechcraft_lmp_potorchu
 	${QT_LIBRARIES}
@@ -38,4 +41,3 @@ target_link_libraries (leechcraft_lmp_potorchu
 
 install (TARGETS leechcraft_lmp_potorchu DESTINATION ${LC_PLUGINS_DEST})
 #install (FILES lmppotorchufiltersettings.xml DESTINATION ${LC_SETTINGS_DEST})
-#install (FILES ${POTORCHU_COMPILED_TRANSLATIONS} DESTINATION ${LC_TRANSLATIONS_DEST})

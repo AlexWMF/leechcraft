@@ -55,10 +55,23 @@ namespace LackMan
 	void PendingManager::Reset ()
 	{
 		ReinitRootItems ();
+
+		for (const auto id : ScheduledForAction_.value (Action::Update))
+			packageUpdateToggled (id, false);
+
+		for (const auto id : ScheduledForAction_.value (Action::Install))
+			packageInstallRemoveToggled (id, false);
+		for (const auto id : ScheduledForAction_.value (Action::Remove))
+			packageInstallRemoveToggled (id, false);
+
 		for (int i = Action::Install; i < Action::MAX; ++i)
 			ScheduledForAction_ [static_cast<Action> (i)].clear ();
+
 		Deps_.clear ();
 		ID2ModelRow_.clear ();
+
+		fetchListUpdated ({});
+		hasPendingActionsChanged (false);
 	}
 
 	void PendingManager::ToggleInstallRemove (int id, bool enable, bool installed)
@@ -67,6 +80,8 @@ namespace LackMan
 			EnablePackageInto (id, installed ? Action::Remove : Action::Install);
 		else
 			DisablePackageFrom (id, installed ? Action::Remove : Action::Install);
+
+		emit packageInstallRemoveToggled (id, enable);
 	}
 
 	void PendingManager::ToggleUpdate (int id, bool enable)
@@ -136,7 +151,7 @@ namespace LackMan
 				.arg (info.Name_)
 				.arg (info.ShortDescription_));
 		packageItem->setIcon (Core::Instance ().GetIconForLPI (info));
-		Q_FOREACH (int dep, deps)
+		for (int dep : deps)
 		{
 			info = Core::Instance ().GetListPackageInfo (dep);
 			QStandardItem *item = new QStandardItem (QString ("%1 (%2)")
@@ -148,6 +163,7 @@ namespace LackMan
 		ID2ModelRow_ [id] = packageItem;
 		RootItemForAction_ [action]->appendRow (packageItem);
 
+		NotifyHasPendingActionsChanged ();
 		if (action != Action::Remove)
 			ScheduleNotifyFetchListUpdate ();
 	}
@@ -166,10 +182,10 @@ namespace LackMan
 			return;
 		}
 
-		QStandardItem *item = ID2ModelRow_.take (id);
-		item->parent ()->takeRow (item->row ());
-		delete item;
+		const auto item = ID2ModelRow_.take (id);
+		item->parent ()->removeRow (item->row ());
 
+		NotifyHasPendingActionsChanged ();
 		if (action != Action::Remove)
 			ScheduleNotifyFetchListUpdate ();
 	}
@@ -199,6 +215,14 @@ namespace LackMan
 		}
 	}
 
+	void PendingManager::NotifyHasPendingActionsChanged ()
+	{
+		const bool hasPending = std::any_of (ScheduledForAction_.begin (),
+				ScheduledForAction_.end (),
+				[] (const QSet<int>& set) { return !set.isEmpty (); });
+		emit hasPendingActionsChanged (hasPending);
+	}
+
 	void PendingManager::ScheduleNotifyFetchListUpdate ()
 	{
 		if (NotifyFetchListUpdateScheduled_)
@@ -216,7 +240,7 @@ namespace LackMan
 
 		auto ids = (ScheduledForAction_ [Action::Install] +
 					ScheduledForAction_ [Action::Update]).toList ();
-		Q_FOREACH (const int id, ids)
+		for (const int id : ids)
 			ids << Deps_ [id];
 		emit fetchListUpdated (ids);
 	}

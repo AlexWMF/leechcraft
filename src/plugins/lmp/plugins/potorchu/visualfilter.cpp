@@ -29,10 +29,13 @@
 
 #include "visualfilter.h"
 #include <QtDebug>
+#include <QTemporaryFile>
 #include <QWidget>
+#include <QAction>
 #include <gst/gst.h>
 #include <libprojectM/projectM.hpp>
 #include <util/lmp/gstutil.h>
+#include <interfaces/lmp/ilmpguiproxy.h>
 #include "viswidget.h"
 #include "visscene.h"
 
@@ -80,9 +83,8 @@ namespace Potorchu
 		gst_object_unref (streamPad);
 
 		Widget_->resize (512, 512);
-		Widget_->show ();
 		Widget_->setScene (Scene_.get ());
-		Widget_->SetFps (60);
+		Widget_->SetFps (30);
 
 		connect (Widget_.get (),
 				SIGNAL (redrawRequested ()),
@@ -92,7 +94,19 @@ namespace Potorchu
 				SIGNAL (redrawing ()),
 				this,
 				SLOT (updateFrame ()));
-		//proxy->GetGuiProxy ()->AddCurrentSongTab (tr ("Visualization"), Widget_.get ());
+		connect (Scene_.get (),
+				SIGNAL (sceneRectChanged (QRectF)),
+				this,
+				SLOT (handleSceneRectChanged (QRectF)));
+
+		auto action = new QAction { tr ("Visualization"), this };
+		action->setProperty ("ActionIcon", "view-media-visualization");
+		action->setCheckable (true);
+		connect (action,
+				SIGNAL (triggered (bool)),
+				Widget_.get (),
+				SLOT (setVisible (bool)));
+		proxy->GetGuiProxy ()->AddToolbarAction (action);
 
 		connect (Widget_.get (),
 				SIGNAL (nextVis ()),
@@ -131,37 +145,25 @@ namespace Potorchu
 
 	void VisualFilter::InitProjectM ()
 	{
-		/*
-    struct Settings {
-        int meshX;
-        int meshY;
-        int fps;
-        int textureSize;
-        int windowWidth;
-        int windowHeight;
-        std::string presetURL;
-        std::string titleFontURL;
-        std::string menuFontURL;
-        int smoothPresetDuration;
-        int presetDuration;
-        float beatSensitivity;
-        bool aspectCorrection;
-        float easterEgg;
-        bool shuffleEnabled;
-	bool softCutRatingsEnabled;
-    };
-	*/
+		std::unique_ptr<QTemporaryFile> fontFile
+		{
+			QTemporaryFile::createLocalFile (":/lmp/potorchu/resources/data/blank.ttf")
+		};
+		const std::string fontFileNameStr { fontFile->fileName ().toUtf8 ().constData () };
+
+		const auto& sceneRect = Scene_->sceneRect ().toRect ();
+
 		projectM::Settings settings
 		{
 			32,
 			24,
-			60,
+			30,
 			512,
-			512,
-			512,
+			sceneRect.width (),
+			sceneRect.height (),
 			"/usr/share/projectM/presets",
-			"/usr/share/fonts/droid/DroidSans.ttf",
-			"/usr/share/fonts/droid/DroidSans.ttf",
+			fontFileNameStr,
+			fontFileNameStr,
 			5,
 			15,
 			0,
@@ -182,8 +184,10 @@ namespace Potorchu
 			ProjectM_->pcm ()->addPCM16Data (data, samples);
 	}
 
-	void VisualFilter::SetVisualizer ()
+	void VisualFilter::handleSceneRectChanged (const QRectF& rect)
 	{
+		if (ProjectM_)
+			ProjectM_->projectM_resetGL (rect.width (), rect.height ());
 	}
 
 	void VisualFilter::updateFrame ()
@@ -196,10 +200,12 @@ namespace Potorchu
 
 	void VisualFilter::handleNextVis ()
 	{
+		ProjectM_->selectNext (true);
 	}
 
 	void VisualFilter::handlePrevVis ()
 	{
+		ProjectM_->selectPrevious (true);
 	}
 }
 }

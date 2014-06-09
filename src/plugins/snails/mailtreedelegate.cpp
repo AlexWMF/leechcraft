@@ -30,7 +30,7 @@
 #include "mailtreedelegate.h"
 #include <QPainter>
 #include "mailtab.h"
-#include "mailmodelmanager.h"
+#include "mailmodel.h"
 
 namespace LeechCraft
 {
@@ -44,7 +44,7 @@ namespace Snails
 	void MailTreeDelegate::paint (QPainter *painter,
 			const QStyleOptionViewItem& item, const QModelIndex& index) const
 	{
-		const bool isRead = index.data (MailModelManager::MailRole::ReadStatus).toBool ();
+		const bool isRead = index.data (MailModel::MailRole::ReadStatus).toBool ();
 
 		if (isRead)
 			QStyledItemDelegate::paint (painter, item, index);

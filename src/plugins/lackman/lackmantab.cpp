@@ -44,6 +44,7 @@
 #include "packagesdelegate.h"
 #include "pendingmanager.h"
 #include "storage.h"
+#include "updatesnotificationmanager.h"
 
 Q_DECLARE_METATYPE (QModelIndex)
 
@@ -243,6 +244,7 @@ namespace LackMan
 		Apply_ = new QAction (tr ("Apply"), this);
 		Apply_->setProperty ("ActionIcon", "dialog-ok");
 		Apply_->setShortcut (QString ("Ctrl+G"));
+		Apply_->setEnabled (false);
 		connect (Apply_,
 				SIGNAL (triggered ()),
 				&Core::Instance (),
@@ -251,6 +253,7 @@ namespace LackMan
 
 		Cancel_ = new QAction (tr ("Cancel"), this);
 		Cancel_->setProperty ("ActionIcon", "dialog-cancel");
+		Cancel_->setEnabled (false);
 		connect (Cancel_,
 				SIGNAL (triggered ()),
 				&Core::Instance (),
@@ -263,6 +266,23 @@ namespace LackMan
 		Toolbar_->addSeparator ();
 		Toolbar_->addAction (Apply_);
 		Toolbar_->addAction (Cancel_);
+
+		const auto pm = Core::Instance ().GetPendingManager ();
+		connect (pm,
+				SIGNAL (hasPendingActionsChanged (bool)),
+				Apply_,
+				SLOT (setEnabled (bool)));
+		connect (pm,
+				SIGNAL (hasPendingActionsChanged (bool)),
+				Cancel_,
+				SLOT (setEnabled (bool)));
+
+		auto unm = Core::Instance ().GetUpdatesNotificationManager ();
+		UpgradeAll_->setEnabled (unm->HasUpgradable ());
+		connect (unm,
+				SIGNAL (hasUpgradablePackages (bool)),
+				UpgradeAll_,
+				SLOT (setEnabled (bool)));
 	}
 
 	void LackManTab::navigateUp ()
