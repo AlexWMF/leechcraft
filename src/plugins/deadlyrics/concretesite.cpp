@@ -138,7 +138,7 @@ namespace DeadLyrics
 		{
 			const auto& replace = urlFormat.attribute ("replace");
 			const auto& with = urlFormat.attribute ("with");
-			Q_FOREACH (const auto c, replace)
+			for (const auto c : replace)
 				Replacements_ [c] = with;
 
 			urlFormat = urlFormat.nextSiblingElement ("urlFormat");
@@ -183,7 +183,7 @@ namespace DeadLyrics
 	{
 		auto replace = [this] (QString str) -> QString
 		{
-			Q_FOREACH (const QChar c, Desc_.Replacements_.keys ())
+			for (const auto& c : Desc_.Replacements_.keys ())
 				str.replace (c, Desc_.Replacements_ [c]);
 			return str;
 		};
@@ -244,12 +244,14 @@ namespace DeadLyrics
 	void ConcreteSite::handleReplyFinished ()
 	{
 		auto reply = qobject_cast<QNetworkReply*> (sender ());
-
 		const auto& data = reply->readAll ();
 		const auto& contentType = reply->header (QNetworkRequest::ContentTypeHeader);
 
 		reply->deleteLater ();
 		deleteLater ();
+
+		if (reply->error () != QNetworkReply::NoError)
+			return;
 
 #ifdef QT_DEBUG
 		qDebug () << Q_FUNC_INFO
@@ -303,14 +305,6 @@ namespace DeadLyrics
 		qWarning () << "\tdesc:"
 				<< Desc_.Name_
 				<< Desc_.URLTemplate_;
-
-		disconnect (reply,
-				SIGNAL (finished ()),
-				this,
-				SLOT (handleReplyFinished ()));
-
-		reply->deleteLater ();
-		deleteLater ();
 	}
 }
 }

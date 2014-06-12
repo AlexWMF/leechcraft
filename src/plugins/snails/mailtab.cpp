@@ -157,7 +157,7 @@ namespace Snails
 		{
 			QStringList result;
 
-			Q_FOREACH (const auto& pair, adds)
+			for (const auto& pair : adds)
 			{
 				const bool hasName = !pair.first.isEmpty ();
 
@@ -188,11 +188,17 @@ namespace Snails
 	{
 		if (!CurrAcc_)
 		{
-			Ui_.MailView_->setHtml (QString ());
+			Ui_.MailView_->setHtml ({});
 			return;
 		}
 
 		CurrMsg_.reset ();
+
+		if (!sidx.isValid ())
+		{
+			Ui_.MailView_->setHtml ({});
+			return;
+		}
 
 		const QModelIndex& idx = MailSortFilterModel_->mapToSource (sidx);
 		const QByteArray& id = idx.sibling (idx.row (), 0)
@@ -201,8 +207,7 @@ namespace Snails
 		Message_ptr msg;
 		try
 		{
-			msg = Core::Instance ().GetStorage ()->
-					LoadMessage (CurrAcc_.get (), id);
+			msg = Core::Instance ().GetStorage ()->LoadMessage (CurrAcc_.get (), id);
 		}
 		catch (const std::exception& e)
 		{
@@ -224,31 +229,46 @@ namespace Snails
 		if (!msg->IsFullyFetched ())
 			CurrAcc_->FetchWholeMessage (msg);
 
-		QString html = Core::Instance ().GetMsgViewTemplate ();
-		html.replace ("{subject}", msg->GetSubject ());
-		const auto& from = msg->GetAddress (Message::Address::From);
-		html.replace ("{from}", from.first);
-		html.replace ("{fromEmail}", from.second);
-		html.replace ("{to}", HTMLize (msg->GetAddresses (Message::Address::To)));
-		html.replace ("{date}", msg->GetDate ().toString ());
+		QString html = R"delim(<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+			<html xmlns="http://www.w3.org/1999/xhtml">
+				<head>
+					<title>Message</title>
+					<style>)delim";
+		html += Core::Instance ().GetMsgViewTemplate ();
+		html += "</style></head><body>";
+		auto addField = [&html] (const QString& cssClass, const QString& name, const QString& text)
+		{
+			if (!text.isEmpty ())
+				html += "<span class='field " + cssClass + "'><span class='fieldName'>" +
+						name + "</span>: " + text + "</span><br />";
+		};
 
-		const QString& htmlBody = msg->IsFullyFetched () ?
+		addField ("subject", tr ("Subject"), msg->GetSubject ());
+		addField ("from", tr ("From"), HTMLize ({ msg->GetAddress (Message::Address::From) }));
+		addField ("to", tr ("To"), HTMLize (msg->GetAddresses (Message::Address::To)));
+		addField ("cc", tr ("Copy"), HTMLize (msg->GetAddresses (Message::Address::Cc)));
+		addField ("bcc", tr ("Blind copy"), HTMLize (msg->GetAddresses (Message::Address::Bcc)));
+		addField ("date", tr ("Date"), msg->GetDate ().toString ());
+
+		const auto& htmlBody = msg->IsFullyFetched () ?
 				msg->GetHTMLBody () :
 				"<em>" + tr ("Fetching the message...") + "</em>";
 
-		html.replace ("{body}", htmlBody.isEmpty () ?
-					"<pre>" + Qt::escape (msg->GetBody ()) + "</pre>" :
-					htmlBody);
+		html += "<div class='body'>";
+		html += htmlBody.isEmpty () ?
+				"<pre>" + Qt::escape (msg->GetBody ()) + "</pre>" :
+				htmlBody;
+		html += "</div>";
+		html += "</body></html>";
 
 		Ui_.MailView_->setHtml (html);
 
 		MsgAttachments_->clear ();
 		MsgAttachments_->setEnabled (!msg->GetAttachments ().isEmpty ());
-		Q_FOREACH (const auto& att, msg->GetAttachments ())
+		for (const auto& att : msg->GetAttachments ())
 		{
-			const QString& actName = att.GetName () +
-					" (" + Util::MakePrettySize (att.GetSize ()) + ")";
-			QAction *act = MsgAttachments_->addAction (actName,
+			const auto& name = att.GetName () + " (" + Util::MakePrettySize (att.GetSize ()) + ")";
+			const auto act = MsgAttachments_->addAction (name,
 					this,
 					SLOT (handleAttachment ()));
 			act->setProperty ("Snails/MsgId", id);
@@ -288,7 +308,7 @@ namespace Snails
 	void MailTab::handleFetchNewMail ()
 	{
 		Storage *st = Core::Instance ().GetStorage ();
-		Q_FOREACH (auto acc, Core::Instance ().GetAccounts ())
+		for (auto acc : Core::Instance ().GetAccounts ())
 			acc->Synchronize (st->HasMessagesIn (acc.get ()) ?
 						Account::FetchNew:
 						Account::FetchAll);

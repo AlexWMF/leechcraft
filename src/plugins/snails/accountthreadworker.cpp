@@ -31,7 +31,6 @@
 #include <QMutexLocker>
 #include <QUrl>
 #include <QFile>
-#include <QTimer>
 #include <QSslSocket>
 #include <QtDebug>
 #include <vmime/security/defaultAuthenticator.hpp>
@@ -112,35 +111,11 @@ namespace Snails
 		}
 	}
 
-	class TimerGuard
-	{
-		QTimer *T_;
-		int Timeout_;
-	public:
-		TimerGuard (QTimer *t, int timeout = 30000)
-		: T_ (t)
-		, Timeout_ (timeout)
-		{
-			T_->stop ();
-		}
-
-		~TimerGuard ()
-		{
-			T_->start (Timeout_);
-		}
-	};
-
 	AccountThreadWorker::AccountThreadWorker (Account *parent)
 	: A_ (parent)
 	, Session_ (new vmime::net::session ())
-	, DisconnectTimer_ (new QTimer (this))
 	, CertVerifier_ (vmime::make_shared<vmime::security::cert::defaultCertificateVerifier> ())
 	{
-		connect (DisconnectTimer_,
-				SIGNAL (timeout ()),
-				this,
-				SLOT (timeoutDisconnect ()));
-
 		std::vector<boost::shared_ptr<vmime::security::cert::X509Certificate>> vCerts;
 		for (const auto& sysCert : QSslSocket::systemCaCertificates ())
 		{
@@ -273,7 +248,6 @@ namespace Snails
 			msg->SetRead (true);
 
 		auto header = message->getHeader ();
-
 		try
 		{
 			if (const auto& from = header->From ())
@@ -290,24 +264,51 @@ namespace Snails
 			qWarning () << "no 'from' data";
 		}
 
-		try
+		auto setAddresses = [&msg] (Message::Address type,
+				const vmime::shared_ptr<const vmime::headerField>& field) -> void
 		{
-			const auto& val = header->To ()->getValue ();
-			if (const auto& alist = vmime::dynamicCast<const vmime::addressList> (val))
+			if (!field)
+				return;
+
+			if (const auto& alist = vmime::dynamicCast<const vmime::addressList> (field->getValue ()))
 			{
 				const auto& vec = alist->toMailboxList ()->getMailboxList ();
 
-				Message::Addresses_t to;
-				std::transform (vec.begin (), vec.end (), std::back_inserter (to),
+				Message::Addresses_t addrs;
+				std::transform (vec.begin (), vec.end (), std::back_inserter (addrs),
 						[] (decltype (vec.front ()) add) { return Mailbox2Strings (add); });
-				msg->SetAddresses (Message::Address::To, to);
+				msg->SetAddresses (type, addrs);
 			}
 			else
-				qWarning () << "no 'to' data: cannot cast to mailbox list";
+				qWarning () << "no"
+						<< static_cast<int> (type)
+						<< "data: cannot cast to mailbox list"
+						<< typeid (*field).name ();
+		};
+
+		try
+		{
+			setAddresses (Message::Address::To, header->To ());
 		}
 		catch (const vmime::exceptions::no_such_field& nsf)
 		{
 			qWarning () << "no 'to' data" << nsf.what ();
+		}
+
+		try
+		{
+			setAddresses (Message::Address::Cc, header->Cc ());
+		}
+		catch (const vmime::exceptions::no_such_field& nsf)
+		{
+		}
+
+		try
+		{
+			setAddresses (Message::Address::Bcc, header->Bcc ());
+		}
+		catch (const vmime::exceptions::no_such_field& nsf)
+		{
 		}
 
 		try
@@ -639,8 +640,6 @@ namespace Snails
 			break;
 		case Account::InType::IMAP:
 		{
-			TimerGuard g (DisconnectTimer_);
-
 			auto store = MakeStore ();
 			FetchMessagesIMAP (flags, folders, store);
 			SyncIMAPFolders (store);
@@ -658,8 +657,6 @@ namespace Snails
 
 		if (A_->InType_ == Account::InType::POP3)
 			return;
-
-		TimerGuard g (DisconnectTimer_);
 
 		const QByteArray& sid = origMsg->GetID ();
 		auto folder = GetFolder (origMsg->GetFolders ().value (0), vmime::net::folder::MODE_READ_WRITE);
@@ -712,8 +709,6 @@ namespace Snails
 	{
 		if (A_->InType_ == Account::InType::POP3)
 			return;
-
-		TimerGuard g (DisconnectTimer_);
 
 		const auto& msgId = msg->GetID ();
 		const vmime::string id { msgId.constData () };
@@ -795,8 +790,6 @@ namespace Snails
 		if (!msg)
 			return;
 
-		TimerGuard g (DisconnectTimer_);
-
 		vmime::messageBuilder mb;
 		mb.setSubject (vmime::text (msg->GetSubject ().toUtf8 ().constData ()));
 		mb.setExpeditor (FromPair (msg->GetAddress (Message::Address::From)));
@@ -869,17 +862,6 @@ namespace Snails
 			return;
 		}
 		transport->send (vMsg, pl);
-	}
-
-	void AccountThreadWorker::timeoutDisconnect ()
-	{
-		if (!CachedStore_)
-			return;
-
-		CachedFolders_.clear ();
-
-		CachedStore_->disconnect ();
-		CachedStore_ = vmime::shared_ptr<vmime::net::store> ();
 	}
 }
 }

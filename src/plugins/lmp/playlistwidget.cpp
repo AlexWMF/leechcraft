@@ -198,6 +198,10 @@ namespace LMP
 				SIGNAL (bufferStatusChanged (int)),
 				this,
 				SLOT (handleBufferStatus (int)));
+		connect (Player_,
+				SIGNAL (songChanged (MediaInfo)),
+				this,
+				SLOT (handleSongChanged (MediaInfo)));
 
 		PlaylistFilter_->setSourceModel (Player_->GetPlaylistModel ());
 		Ui_.Playlist_->setModel (PlaylistFilter_);
@@ -755,6 +759,12 @@ namespace LMP
 		Ui_.BufferProgress_->setVisible (status > 0 && status < 100);
 	}
 
+	void PlaylistWidget::handleSongChanged (const MediaInfo& info)
+	{
+		if (!info.LocalPath_.isEmpty ())
+			handleBufferStatus (100);
+	}
+
 	void PlaylistWidget::handleStdSort ()
 	{
 		const auto& intVars = sender ()->property ("SortInts").toList ();
@@ -798,7 +808,7 @@ namespace LMP
 				tr ("Remove %1").arg (indexes.at (0).data ().toString ()) :
 				tr ("Remove %n song(s)", 0, indexes.size ());
 
-		Q_FOREACH (const auto& idx, indexes)
+		for (const auto& idx : indexes)
 			removedSources << Player_->GetIndexSources (PlaylistFilter_->mapToSource (idx));
 
 		auto cmd = new PlaylistUndoCommand (title, removedSources, Player_);
