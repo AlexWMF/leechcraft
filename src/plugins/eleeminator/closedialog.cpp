@@ -1,6 +1,6 @@
 /**********************************************************************
  * LeechCraft - modular cross-platform feature rich internet client.
- * Copyright (C) 2006-2014  Georg Rudoy
+ * Copyright (C) 2014  Georg Rudoy
  *
  * Boost Software License - Version 1.0 - August 17th, 2003
  *
@@ -27,55 +27,19 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#pragma once
-
-#include <QObject>
-#include <QDir>
-#include <QSettings>
-#include <QHash>
-#include <QSet>
-#include "message.h"
-
-class QSqlDatabase;
-typedef std::shared_ptr<QSqlDatabase> QSqlDatabase_ptr;
+#include "closedialog.h"
 
 namespace LeechCraft
 {
-namespace Snails
+namespace Eleeminator
 {
-	class Account;
-
-	class Storage : public QObject
+	CloseDialog::CloseDialog (QAbstractItemModel *model, QWidget *parent)
+	: QDialog { parent }
+	, Model_ { model }
 	{
-		Q_OBJECT
-
-		QDir SDir_;
-		QSettings Settings_;
-		QHash<QByteArray, bool> IsMessageRead_;
-
-		QHash<Account*, QSqlDatabase_ptr> AccountBases_;
-		QHash<Account*, QHash<QByteArray, Message_ptr>> PendingSaveMessages_;
-
-		QHash<QObject*, Account*> FutureWatcher2Account_;
-	public:
-		Storage (QObject* = 0);
-
-		void SaveMessages (Account*, const QStringList& folders, const QList<Message_ptr>&);
-		MessageSet LoadMessages (Account*);
-		Message_ptr LoadMessage (Account*, const QStringList& folder, const QByteArray& id);
-		QSet<QByteArray> LoadIDs (Account*, const QStringList& folder);
-		int GetNumMessages (Account*) const;
-		bool HasMessagesIn (Account*) const;
-
-		bool IsMessageRead (Account*, const QStringList& folder, const QByteArray&);
-	private:
-		QDir DirForAccount (Account*) const;
-		QSqlDatabase_ptr BaseForAccount (Account*);
-
-		void AddMsgToFolders (Message_ptr, Account*);
-		void UpdateCaches (Message_ptr);
-	private slots:
-		void handleMessagesSaved ();
-	};
+		Ui_.setupUi (this);
+		Ui_.ChildView_->setModel (model);
+		Ui_.ChildView_->expandAll ();
+	}
 }
 }

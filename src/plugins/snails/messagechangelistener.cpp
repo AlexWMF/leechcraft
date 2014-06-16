@@ -27,55 +27,42 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#pragma once
-
-#include <QObject>
-#include <QDir>
-#include <QSettings>
-#include <QHash>
-#include <QSet>
-#include "message.h"
-
-class QSqlDatabase;
-typedef std::shared_ptr<QSqlDatabase> QSqlDatabase_ptr;
+#include "messagechangelistener.h"
+#include <QStringList>
+#include <QtDebug>
+#include <vmime/net/folder.hpp>
+#include "vmimeconversions.h"
 
 namespace LeechCraft
 {
 namespace Snails
 {
-	class Account;
-
-	class Storage : public QObject
+	MessageChangeListener::MessageChangeListener (QObject *parent)
+	: QObject { parent }
 	{
-		Q_OBJECT
+	}
 
-		QDir SDir_;
-		QSettings Settings_;
-		QHash<QByteArray, bool> IsMessageRead_;
+	std::shared_ptr<void> MessageChangeListener::Disable ()
+	{
+		if (!IsEnabled_)
+			return {};
 
-		QHash<Account*, QSqlDatabase_ptr> AccountBases_;
-		QHash<Account*, QHash<QByteArray, Message_ptr>> PendingSaveMessages_;
+		IsEnabled_ = false;
+		return std::shared_ptr<void> (nullptr, [this] (void*) { IsEnabled_ = true; });
+	}
 
-		QHash<QObject*, Account*> FutureWatcher2Account_;
-	public:
-		Storage (QObject* = 0);
+	void MessageChangeListener::messageChanged (vmime::shared_ptr<vmime::net::events::messageChangedEvent> event)
+	{
+		if (!IsEnabled_)
+			return;
 
-		void SaveMessages (Account*, const QStringList& folders, const QList<Message_ptr>&);
-		MessageSet LoadMessages (Account*);
-		Message_ptr LoadMessage (Account*, const QStringList& folder, const QByteArray& id);
-		QSet<QByteArray> LoadIDs (Account*, const QStringList& folder);
-		int GetNumMessages (Account*) const;
-		bool HasMessagesIn (Account*) const;
+		const auto& folder = event->getFolder ();
 
-		bool IsMessageRead (Account*, const QStringList& folder, const QByteArray&);
-	private:
-		QDir DirForAccount (Account*) const;
-		QSqlDatabase_ptr BaseForAccount (Account*);
+		QList<int> numsList;
+		for (const auto num : event->getNumbers ())
+			numsList << num;
 
-		void AddMsgToFolders (Message_ptr, Account*);
-		void UpdateCaches (Message_ptr);
-	private slots:
-		void handleMessagesSaved ();
-	};
+		emit messagesChanged (GetFolderPath (folder), numsList);
+	}
 }
 }

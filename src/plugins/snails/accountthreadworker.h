@@ -45,21 +45,25 @@ namespace LeechCraft
 namespace Snails
 {
 	class Account;
+	class MessageChangeListener;
 
 	class AccountThreadWorker : public QObject
 	{
 		Q_OBJECT
 
-		Account *A_;
+		Account * const A_;
+
+		const bool IsListening_;
+
+		MessageChangeListener * const ChangeListener_;
+
 		vmime::shared_ptr<vmime::net::session> Session_;
 		vmime::shared_ptr<vmime::net::store> CachedStore_;
 		QHash<QStringList, vmime::shared_ptr<vmime::net::folder>> CachedFolders_;
 
-		QHash<QStringList, QHash<QByteArray, int>> SeqCache_;
-
 		const vmime::shared_ptr<vmime::security::cert::defaultCertificateVerifier> CertVerifier_;
 	public:
-		AccountThreadWorker (Account*);
+		AccountThreadWorker (bool, Account*);
 	private:
 		vmime::shared_ptr<vmime::net::store> MakeStore ();
 		vmime::shared_ptr<vmime::net::transport> MakeTransport ();
@@ -73,18 +77,21 @@ namespace Snails
 		void SyncIMAPFolders (vmime::shared_ptr<vmime::net::store>);
 		QList<Message_ptr> FetchFullMessages (const std::vector<vmime::shared_ptr<vmime::net::message>>&);
 		ProgressListener* MkPgListener (const QString&);
+	private slots:
+		void handleMessagesChanged (const QStringList& folder, const QList<int>& numbers);
 	public slots:
-		void synchronize (Account::FetchFlags, const QList<QStringList>&);
-		void fetchWholeMessage (Message_ptr);
-		void fetchAttachment (Message_ptr, const QString&, const QString&);
-		void sendMessage (Message_ptr);
+		void synchronize (LeechCraft::Snails::Account::FetchFlags, const QList<QStringList>&);
+		void setReadStatus (bool read, const QList<QByteArray>& ids, const QStringList& folder);
+		void fetchWholeMessage (LeechCraft::Snails::Message_ptr);
+		void fetchAttachment (LeechCraft::Snails::Message_ptr, const QString&, const QString&);
+		void sendMessage (LeechCraft::Snails::Message_ptr);
 	signals:
 		void error (const QString&);
 		void gotEntity (const LeechCraft::Entity&);
 		void gotProgressListener (ProgressListener_g_ptr);
-		void gotMsgHeaders (QList<Message_ptr>);
+		void gotMsgHeaders (QList<Message_ptr>, QStringList);
 		void messageBodyFetched (Message_ptr);
-		void gotUpdatedMessages (QList<Message_ptr>);
+		void gotUpdatedMessages (QList<Message_ptr>, QStringList);
 		void gotOtherMessages (QList<QByteArray>, QStringList);
 		void gotFolders (QList<QStringList>);
 	};

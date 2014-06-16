@@ -30,52 +30,48 @@
 #pragma once
 
 #include <QObject>
-#include <QDir>
-#include <QSettings>
-#include <QHash>
-#include <QSet>
-#include "message.h"
-
-class QSqlDatabase;
-typedef std::shared_ptr<QSqlDatabase> QSqlDatabase_ptr;
+#include <QString>
+#include <QMutex>
+#include "valuedmetaargument.h"
 
 namespace LeechCraft
 {
 namespace Snails
 {
-	class Account;
+	struct TaskQueueItem
+	{
+		QByteArray Method_;
+		QList<ValuedMetaArgument> Args_;
 
-	class Storage : public QObject
+		QByteArray ID_;
+
+		TaskQueueItem ();
+		TaskQueueItem (const QByteArray&, const QList<ValuedMetaArgument>&, const QByteArray& = {});
+	};
+
+	bool operator== (const TaskQueueItem&, const TaskQueueItem&);
+
+	class AccountThreadWorker;
+
+	class TaskQueueManager : public QObject
 	{
 		Q_OBJECT
 
-		QDir SDir_;
-		QSettings Settings_;
-		QHash<QByteArray, bool> IsMessageRead_;
+		AccountThreadWorker * const ATW_;
 
-		QHash<Account*, QSqlDatabase_ptr> AccountBases_;
-		QHash<Account*, QHash<QByteArray, Message_ptr>> PendingSaveMessages_;
-
-		QHash<QObject*, Account*> FutureWatcher2Account_;
+		mutable QMutex ItemsMutex_;
+		QList<TaskQueueItem> Items_;
 	public:
-		Storage (QObject* = 0);
+		TaskQueueManager (AccountThreadWorker*);
 
-		void SaveMessages (Account*, const QStringList& folders, const QList<Message_ptr>&);
-		MessageSet LoadMessages (Account*);
-		Message_ptr LoadMessage (Account*, const QStringList& folder, const QByteArray& id);
-		QSet<QByteArray> LoadIDs (Account*, const QStringList& folder);
-		int GetNumMessages (Account*) const;
-		bool HasMessagesIn (Account*) const;
-
-		bool IsMessageRead (Account*, const QStringList& folder, const QByteArray&);
-	private:
-		QDir DirForAccount (Account*) const;
-		QSqlDatabase_ptr BaseForAccount (Account*);
-
-		void AddMsgToFolders (Message_ptr, Account*);
-		void UpdateCaches (Message_ptr);
+		void AddTask (const TaskQueueItem&);
+		bool HasItems () const;
+		TaskQueueItem PopItem ();
 	private slots:
-		void handleMessagesSaved ();
+		void rotateTaskQueue ();
+	signals:
+		void gotTask ();
 	};
 }
 }
+

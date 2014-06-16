@@ -27,55 +27,43 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#pragma once
-
-#include <QObject>
-#include <QDir>
-#include <QSettings>
-#include <QHash>
-#include <QSet>
-#include "message.h"
-
-class QSqlDatabase;
-typedef std::shared_ptr<QSqlDatabase> QSqlDatabase_ptr;
+#include "valuedmetaargument.h"
+#include <QDebug>
 
 namespace LeechCraft
 {
 namespace Snails
 {
-	class Account;
-
-	class Storage : public QObject
+	ValuedMetaArgument::operator QGenericArgument () const
 	{
-		Q_OBJECT
+		if (!Holder_)
+			return {};
 
-		QDir SDir_;
-		QSettings Settings_;
-		QHash<QByteArray, bool> IsMessageRead_;
+		return { Holder_->GetTypeName (), Holder_->GetValue () };
+	}
 
-		QHash<Account*, QSqlDatabase_ptr> AccountBases_;
-		QHash<Account*, QHash<QByteArray, Message_ptr>> PendingSaveMessages_;
+	bool ValuedMetaArgument::operator== (const ValuedMetaArgument& other) const
+	{
+		if (!Holder_)
+			return !other.Holder_;
 
-		QHash<QObject*, Account*> FutureWatcher2Account_;
-	public:
-		Storage (QObject* = 0);
+		return Holder_->Equals (*other.Holder_);
+	}
 
-		void SaveMessages (Account*, const QStringList& folders, const QList<Message_ptr>&);
-		MessageSet LoadMessages (Account*);
-		Message_ptr LoadMessage (Account*, const QStringList& folder, const QByteArray& id);
-		QSet<QByteArray> LoadIDs (Account*, const QStringList& folder);
-		int GetNumMessages (Account*) const;
-		bool HasMessagesIn (Account*) const;
-
-		bool IsMessageRead (Account*, const QStringList& folder, const QByteArray&);
-	private:
-		QDir DirForAccount (Account*) const;
-		QSqlDatabase_ptr BaseForAccount (Account*);
-
-		void AddMsgToFolders (Message_ptr, Account*);
-		void UpdateCaches (Message_ptr);
-	private slots:
-		void handleMessagesSaved ();
-	};
+	void ValuedMetaArgument::DebugPrint (QDebug& debug) const
+	{
+		debug = debug.nospace ();
+		debug << "{ " << Holder_->GetTypeName () << ": ";
+		Holder_->DebugPrint (debug);
+		debug << " }";
+		debug = debug.space ();
+	}
 }
 }
+
+QDebug operator<< (QDebug debug, const LeechCraft::Snails::ValuedMetaArgument& arg)
+{
+	arg.DebugPrint (debug);
+	return debug;
+}
+

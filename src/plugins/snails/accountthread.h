@@ -37,18 +37,24 @@ namespace Snails
 {
 	class Account;
 	class AccountThreadWorker;
+	class TaskQueueManager;
 
 	class AccountThread : public QThread
 	{
 		Q_OBJECT
 
-		Account *A_;
-		AccountThreadWorker *W_;
-	public:
-		AccountThread (Account*);
+		Account * const A_;
+		const bool IsListening_;
 
-		AccountThreadWorker* GetWorker () const;
+		AccountThreadWorker *W_;
+
+		TaskQueueManager *QueueManager_ = nullptr;
+	public:
+		AccountThread (bool isListening, Account*);
+
+		TaskQueueManager* GetTaskManager () const;
 	protected:
+		AccountThreadWorker* GetWorker () const;
 		void run ();
 	private:
 		void ConnectSignals ();

@@ -29,53 +29,83 @@
 
 #pragma once
 
-#include <QObject>
-#include <QDir>
-#include <QSettings>
-#include <QHash>
-#include <QSet>
-#include "message.h"
-
-class QSqlDatabase;
-typedef std::shared_ptr<QSqlDatabase> QSqlDatabase_ptr;
+#include <memory>
+#include <QMetaType>
+#include <QDebug>
 
 namespace LeechCraft
 {
 namespace Snails
 {
-	class Account;
-
-	class Storage : public QObject
+	class ValuedMetaArgument
 	{
-		Q_OBJECT
+		struct HolderBase
+		{
+			virtual int GetTypeId () const = 0;
+			virtual const char* GetTypeName () const = 0;
+			virtual const void* GetValue () const = 0;
 
-		QDir SDir_;
-		QSettings Settings_;
-		QHash<QByteArray, bool> IsMessageRead_;
+			virtual bool Equals (const HolderBase&) const = 0;
 
-		QHash<Account*, QSqlDatabase_ptr> AccountBases_;
-		QHash<Account*, QHash<QByteArray, Message_ptr>> PendingSaveMessages_;
+			virtual void DebugPrint (QDebug&) const = 0;
+		};
 
-		QHash<QObject*, Account*> FutureWatcher2Account_;
+		std::shared_ptr<HolderBase> Holder_;
+
+		template<typename T>
+		struct Holder : HolderBase
+		{
+			const T T_;
+
+			Holder (const T& t)
+			: T_ { t }
+			{
+			}
+
+			int GetTypeId () const
+			{
+				return qMetaTypeId<T> ();
+			}
+
+			const char* GetTypeName () const
+			{
+				return QMetaType::typeName (qMetaTypeId<T> ());
+			}
+
+			const void* GetValue () const
+			{
+				return static_cast<const void*> (&T_);
+			}
+
+			bool Equals (const HolderBase& other) const
+			{
+				if (GetTypeId () != other.GetTypeId ())
+					return false;
+
+				return T_ == static_cast<const Holder<T>&> (other).T_;
+			}
+
+			void DebugPrint (QDebug& out) const
+			{
+				out << T_;
+			}
+		};
 	public:
-		Storage (QObject* = 0);
+		ValuedMetaArgument () = default;
 
-		void SaveMessages (Account*, const QStringList& folders, const QList<Message_ptr>&);
-		MessageSet LoadMessages (Account*);
-		Message_ptr LoadMessage (Account*, const QStringList& folder, const QByteArray& id);
-		QSet<QByteArray> LoadIDs (Account*, const QStringList& folder);
-		int GetNumMessages (Account*) const;
-		bool HasMessagesIn (Account*) const;
+		template<typename T>
+		ValuedMetaArgument (const T& t)
+		: Holder_ { new Holder<T> { t } }
+		{
+		}
 
-		bool IsMessageRead (Account*, const QStringList& folder, const QByteArray&);
-	private:
-		QDir DirForAccount (Account*) const;
-		QSqlDatabase_ptr BaseForAccount (Account*);
+		operator QGenericArgument () const;
 
-		void AddMsgToFolders (Message_ptr, Account*);
-		void UpdateCaches (Message_ptr);
-	private slots:
-		void handleMessagesSaved ();
+		bool operator== (const ValuedMetaArgument& other) const;
+
+		void DebugPrint (QDebug&) const;
 	};
 }
 }
+
+QDebug operator<< (QDebug, const LeechCraft::Snails::ValuedMetaArgument&);

@@ -117,8 +117,16 @@ namespace Snails
 		MsgAttachments_->setIcon (Core::Instance ().GetProxy ()->
 					GetIconThemeManager ()->GetIcon ("mail-attachment"));
 
+		MsgMarkUnread_ = new QAction (tr ("Mark as unread"), this);
+		MsgMarkUnread_->setProperty ("ActionIcon", "mail-mark-unread");
+		connect (MsgMarkUnread_,
+				SIGNAL (triggered ()),
+				this,
+				SLOT (handleMarkMsgUnread ()));
+
 		MsgToolbar_->addAction (MsgReply_);
 		MsgToolbar_->addAction (MsgAttachments_->menuAction ());
+		MsgToolbar_->addAction (MsgMarkUnread_);
 	}
 
 	void MailTab::handleCurrentAccountChanged (const QModelIndex& idx)
@@ -182,6 +190,7 @@ namespace Snails
 	void MailTab::handleCurrentTagChanged (const QModelIndex& sidx)
 	{
 		CurrAcc_->ShowFolder (sidx);
+		handleMailSelected ({});
 	}
 
 	void MailTab::handleMailSelected (const QModelIndex& sidx)
@@ -200,14 +209,14 @@ namespace Snails
 			return;
 		}
 
-		const QModelIndex& idx = MailSortFilterModel_->mapToSource (sidx);
-		const QByteArray& id = idx.sibling (idx.row (), 0)
-				.data (MailModel::MailRole::ID).toByteArray ();
+		const auto& idx = MailSortFilterModel_->mapToSource (sidx);
+		const auto& id = idx.sibling (idx.row (), 0).data (MailModel::MailRole::ID).toByteArray ();
+		const auto& folder = CurrAcc_->GetMailModel ()->GetCurrentFolder ();
 
 		Message_ptr msg;
 		try
 		{
-			msg = Core::Instance ().GetStorage ()->LoadMessage (CurrAcc_.get (), id);
+			msg = Core::Instance ().GetStorage ()->LoadMessage (CurrAcc_.get (), folder, id);
 		}
 		catch (const std::exception& e)
 		{
@@ -222,12 +231,10 @@ namespace Snails
 			return;
 		}
 
-		msg->SetRead (true);
-		Core::Instance ().GetStorage ()->SaveMessages (CurrAcc_.get (), { msg });
-		CurrAcc_->Update (msg);
-
 		if (!msg->IsFullyFetched ())
 			CurrAcc_->FetchWholeMessage (msg);
+		else if (!msg->IsRead ())
+			CurrAcc_->SetReadStatus (true, { id }, folder);
 
 		QString html = R"delim(<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 			<html xmlns="http://www.w3.org/1999/xhtml">
@@ -273,6 +280,7 @@ namespace Snails
 					SLOT (handleAttachment ()));
 			act->setProperty ("Snails/MsgId", id);
 			act->setProperty ("Snails/AttName", att.GetName ());
+			act->setProperty ("Snails/Folder", folder);
 		}
 
 		CurrMsg_ = msg;
@@ -284,6 +292,24 @@ namespace Snails
 			return;
 
 		Core::Instance ().PrepareReplyTab (CurrMsg_, CurrAcc_);
+	}
+
+	void MailTab::handleMarkMsgUnread ()
+	{
+		if (!CurrAcc_)
+			return;
+
+		const auto& rows = Ui_.MailTree_->selectionModel ()->selectedRows ();
+		QList<QByteArray> ids;
+		for (const auto& index : rows)
+			ids << index.data (MailModel::MailRole::ID).toByteArray ();
+
+		const auto& currentId = Ui_.MailTree_->currentIndex ()
+				.data (MailModel::MailRole::ID).toByteArray ();
+		if (!currentId.isEmpty () && !ids.contains (currentId))
+			ids << currentId;
+
+		CurrAcc_->SetReadStatus (false, ids, CurrAcc_->GetMailModel ()->GetCurrentFolder ());
 	}
 
 	void MailTab::handleAttachment ()
@@ -300,8 +326,9 @@ namespace Snails
 			return;
 
 		const auto& id = sender ()->property ("Snails/MsgId").toByteArray ();
+		const auto& folder = sender ()->property ("Snails/Folder").toStringList ();
 
-		auto msg = Core::Instance ().GetStorage ()->LoadMessage (CurrAcc_.get (), id);
+		const auto& msg = Core::Instance ().GetStorage ()->LoadMessage (CurrAcc_.get (), folder, id);
 		CurrAcc_->FetchAttachment (msg, name, path);
 	}
 

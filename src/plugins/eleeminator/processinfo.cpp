@@ -1,6 +1,6 @@
 /**********************************************************************
  * LeechCraft - modular cross-platform feature rich internet client.
- * Copyright (C) 2006-2014  Georg Rudoy
+ * Copyright (C) 2014  Georg Rudoy
  *
  * Boost Software License - Version 1.0 - August 17th, 2003
  *
@@ -27,55 +27,40 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#pragma once
-
-#include <QObject>
-#include <QDir>
-#include <QSettings>
-#include <QHash>
-#include <QSet>
-#include "message.h"
-
-class QSqlDatabase;
-typedef std::shared_ptr<QSqlDatabase> QSqlDatabase_ptr;
+#include "processinfo.h"
 
 namespace LeechCraft
 {
-namespace Snails
+namespace Eleeminator
 {
-	class Account;
-
-	class Storage : public QObject
+	void PrintPI (QDebug& debug, const ProcessInfo& info, int level = 0)
 	{
-		Q_OBJECT
+		const int levelShift = 2;
 
-		QDir SDir_;
-		QSettings Settings_;
-		QHash<QByteArray, bool> IsMessageRead_;
+		auto printShift = [&debug, level]
+		{
+			for (int i = 0; i < level; ++i)
+				debug << " ";
+		};
 
-		QHash<Account*, QSqlDatabase_ptr> AccountBases_;
-		QHash<Account*, QHash<QByteArray, Message_ptr>> PendingSaveMessages_;
+		printShift ();
+		debug << "PI { Pid: " << info.Pid_ << "; command: " << info.Command_ << "; command line: " << info.CommandLine_ << "; children: " << info.Children_.size ();
 
-		QHash<QObject*, Account*> FutureWatcher2Account_;
-	public:
-		Storage (QObject* = 0);
+		if (!info.Children_.isEmpty ())
+		{
+			debug << ":\n";
+			for (const auto& child : info.Children_)
+				PrintPI (debug, child, level + levelShift);
+		}
 
-		void SaveMessages (Account*, const QStringList& folders, const QList<Message_ptr>&);
-		MessageSet LoadMessages (Account*);
-		Message_ptr LoadMessage (Account*, const QStringList& folder, const QByteArray& id);
-		QSet<QByteArray> LoadIDs (Account*, const QStringList& folder);
-		int GetNumMessages (Account*) const;
-		bool HasMessagesIn (Account*) const;
-
-		bool IsMessageRead (Account*, const QStringList& folder, const QByteArray&);
-	private:
-		QDir DirForAccount (Account*) const;
-		QSqlDatabase_ptr BaseForAccount (Account*);
-
-		void AddMsgToFolders (Message_ptr, Account*);
-		void UpdateCaches (Message_ptr);
-	private slots:
-		void handleMessagesSaved ();
-	};
+		printShift ();
+		debug << "}\n";
+	}
 }
+}
+
+QDebug operator<< (QDebug debug, const LeechCraft::Eleeminator::ProcessInfo& info)
+{
+	LeechCraft::Eleeminator::PrintPI (debug.nospace (), info);
+	return debug.space ();
 }

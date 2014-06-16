@@ -42,6 +42,10 @@
 #include "storage.h"
 #include "accountfoldermanager.h"
 #include "mailmodel.h"
+#include "taskqueuemanager.h"
+
+Q_DECLARE_METATYPE (QList<QStringList>)
+Q_DECLARE_METATYPE (QList<QByteArray>)
 
 namespace LeechCraft
 {
@@ -49,7 +53,8 @@ namespace Snails
 {
 	Account::Account (QObject *parent)
 	: QObject (parent)
-	, Thread_ (new AccountThread (this))
+	, Thread_ (new AccountThread (true, this))
+	, MessageFetchThread_ (new AccountThread (false, this))
 	, AccMutex_ (new QMutex (QMutex::Recursive))
 	, ID_ (QUuid::createUuid ().toByteArray ())
 	, UseSASL_ (false)
@@ -66,7 +71,8 @@ namespace Snails
 	, FoldersModel_ (new QStandardItemModel (this))
 	, MailModel_ (new MailModel (this))
 	{
-		Thread_->start (QThread::LowPriority);
+		Thread_->start (QThread::IdlePriority);
+		MessageFetchThread_->start (QThread::LowPriority);
 
 		connect (FolderManager_,
 				SIGNAL (foldersUpdated ()),
@@ -112,7 +118,7 @@ namespace Snails
 		return FolderManager_;
 	}
 
-	QAbstractItemModel* Account::GetMailModel () const
+	MailModel* Account::GetMailModel () const
 	{
 		return MailModel_;
 	}
@@ -126,7 +132,8 @@ namespace Snails
 	{
 		MailModel_->Clear ();
 
-		const QStringList& path = idx.data (FoldersRole::Path).toStringList ();
+		const auto& path = idx.data (FoldersRole::Path).toStringList ();
+		qDebug () << Q_FUNC_INFO << path;
 		if (path.isEmpty ())
 			return;
 
@@ -136,7 +143,7 @@ namespace Snails
 		QList<Message_ptr> messages;
 		const auto& ids = Core::Instance ().GetStorage ()->LoadIDs (this, path);
 		for (const auto& id : ids)
-			messages << Core::Instance ().GetStorage ()->LoadMessage (this, id);
+			messages << Core::Instance ().GetStorage ()->LoadMessage (this, path, id);
 
 		MailModel_->Append (messages);
 
@@ -151,28 +158,34 @@ namespace Snails
 		auto folders = FolderManager_->GetSyncFolders ();
 		if (folders.isEmpty ())
 			folders << QStringList ("INBOX");
-		QMetaObject::invokeMethod (Thread_->GetWorker (),
+
+		Thread_->GetTaskManager ()->AddTask ({
 				"synchronize",
-				Qt::QueuedConnection,
-				Q_ARG (Account::FetchFlags, flags),
-				Q_ARG (QList<QStringList>, folders));
+				{
+					{ flags },
+					{ folders }
+				}
+			});
 	}
 
 	void Account::Synchronize (const QStringList& path)
 	{
-		QMetaObject::invokeMethod (Thread_->GetWorker (),
+		Thread_->GetTaskManager ()->AddTask ({
 				"synchronize",
-				Qt::QueuedConnection,
-				Q_ARG (Account::FetchFlags, FetchFlag::FetchAll),
-				Q_ARG (QList<QStringList>, { path }));
+				{
+					Account::FetchFlags { FetchFlag::FetchAll },
+					QList<QStringList> { path }
+				},
+				"syncFolder"
+			});
 	}
 
 	void Account::FetchWholeMessage (Message_ptr msg)
 	{
-		QMetaObject::invokeMethod (Thread_->GetWorker (),
+		MessageFetchThread_->GetTaskManager ()->AddTask ({
 				"fetchWholeMessage",
-				Qt::QueuedConnection,
-				Q_ARG (Message_ptr, msg));
+				{ msg }
+			});
 	}
 
 	void Account::SendMessage (Message_ptr msg)
@@ -184,21 +197,35 @@ namespace Snails
 			pair.second = UserEmail_;
 		msg->SetAddress (Message::Address::From, pair);
 
-		QMetaObject::invokeMethod (Thread_->GetWorker (),
+		MessageFetchThread_->GetTaskManager ()->AddTask ({
 				"sendMessage",
-				Qt::QueuedConnection,
-				Q_ARG (Message_ptr, msg));
+				{ msg }
+			});
 	}
 
 	void Account::FetchAttachment (Message_ptr msg,
 			const QString& attName, const QString& path)
 	{
-		QMetaObject::invokeMethod (Thread_->GetWorker (),
+		MessageFetchThread_->GetTaskManager ()->AddTask ({
 				"fetchAttachment",
-				Qt::QueuedConnection,
-				Q_ARG (Message_ptr, msg),
-				Q_ARG (QString, attName),
-				Q_ARG (QString, path));
+				{
+					msg,
+					attName,
+					path
+				}
+			});
+	}
+
+	void Account::SetReadStatus (bool read, const QList<QByteArray>& ids, const QStringList& folder)
+	{
+		MessageFetchThread_->GetTaskManager ()->AddTask ({
+				"setReadStatus",
+				{
+					read,
+					ids,
+					folder
+				}
+			});
 	}
 
 	void Account::Update (const Message_ptr& message)
@@ -578,28 +605,31 @@ namespace Snails
 		Core::Instance ().SendEntity (e);
 	}
 
-	void Account::handleMsgHeaders (QList<Message_ptr> messages)
+	void Account::handleMsgHeaders (const QList<Message_ptr>& messages, const QStringList& folder)
 	{
-		Core::Instance ().GetStorage ()->SaveMessages (this, messages);
+		qDebug () << Q_FUNC_INFO << messages.size ();
+		Core::Instance ().GetStorage ()->SaveMessages (this, folder, messages);
 		emit mailChanged ();
 
 		MailModel_->Append (messages);
 	}
 
-	void Account::handleGotUpdatedMessages (QList<Message_ptr> messages)
+	void Account::handleGotUpdatedMessages (const QList<Message_ptr>& messages, const QStringList& folder)
 	{
-		Core::Instance ().GetStorage ()->SaveMessages (this, messages);
+		qDebug () << Q_FUNC_INFO << messages.size ();
+		Core::Instance ().GetStorage ()->SaveMessages (this, folder, messages);
 		emit mailChanged ();
 
-		MailModel_->Append (messages);
+		for (const auto& message : messages)
+			MailModel_->Update (message);
 	}
 
-	void Account::handleGotOtherMessages (QList<QByteArray> ids, QStringList folder)
+	void Account::handleGotOtherMessages (const QList<QByteArray>& ids, const QStringList& folder)
 	{
-		qDebug () << Q_FUNC_INFO << ids.size ();
+		qDebug () << Q_FUNC_INFO << ids.size () << folder;
 		QList<Message_ptr> msgs;
-		Q_FOREACH (auto id, ids)
-			msgs << Core::Instance ().GetStorage ()->LoadMessage (this, id);
+		for (const auto& id : ids)
+			msgs << Core::Instance ().GetStorage ()->LoadMessage (this, folder, id);
 
 		MailModel_->Append (msgs);
 	}
@@ -640,7 +670,8 @@ namespace Snails
 
 	void Account::handleMessageBodyFetched (Message_ptr msg)
 	{
-		Core::Instance ().GetStorage ()->SaveMessages (this, { msg });
+		for (const auto& folder : msg->GetFolders ())
+			Core::Instance ().GetStorage ()->SaveMessages (this, folder, { msg });
 		emit messageBodyFetched (msg);
 	}
 }

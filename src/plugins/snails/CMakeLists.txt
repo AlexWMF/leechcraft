@@ -43,6 +43,9 @@ set (SRCS
 	outputiodevadapter.cpp
 	common.cpp
 	mailmodel.cpp
+	taskqueuemanager.cpp
+	valuedmetaargument.cpp
+	messagechangelistener.cpp
 	)
 set (FORMS
 	mailtab.ui

@@ -28,18 +28,25 @@
  **********************************************************************/
 
 #include "accountthread.h"
-#include <QTimer>
+#include <QtDebug>
 #include "account.h"
 #include "accountthreadworker.h"
 #include "core.h"
+#include "taskqueuemanager.h"
 
 namespace LeechCraft
 {
 namespace Snails
 {
-	AccountThread::AccountThread (Account *parent)
-	: A_ (parent)
+	AccountThread::AccountThread (bool isListening, Account *parent)
+	: A_ { parent }
+	, IsListening_ { isListening }
 	{
+	}
+
+	TaskQueueManager* AccountThread::GetTaskManager () const
+	{
+		return QueueManager_;
 	}
 
 	AccountThreadWorker* AccountThread::GetWorker () const
@@ -49,20 +56,23 @@ namespace Snails
 
 	void AccountThread::run ()
 	{
-		W_ = new AccountThreadWorker (A_);
+		W_ = new AccountThreadWorker { IsListening_, A_ };
+		QueueManager_ = new TaskQueueManager { W_ };
 
 		ConnectSignals ();
 
 		QThread::run ();
+
+		delete QueueManager_;
 		delete W_;
 	}
 
 	void AccountThread::ConnectSignals ()
 	{
 		connect (W_,
-				SIGNAL (gotMsgHeaders (QList<Message_ptr>)),
+				SIGNAL (gotMsgHeaders (QList<Message_ptr>, QStringList)),
 				A_,
-				SLOT (handleMsgHeaders (QList<Message_ptr>)));
+				SLOT (handleMsgHeaders (QList<Message_ptr>, QStringList)));
 		connect (W_,
 				SIGNAL (gotProgressListener (ProgressListener_g_ptr)),
 				A_,
@@ -72,9 +82,9 @@ namespace Snails
 				A_,
 				SLOT (handleMessageBodyFetched (Message_ptr)));
 		connect (W_,
-				SIGNAL (gotUpdatedMessages (QList<Message_ptr>)),
+				SIGNAL (gotUpdatedMessages (QList<Message_ptr>, QStringList)),
 				A_,
-				SLOT (handleGotUpdatedMessages (QList<Message_ptr>)));
+				SLOT (handleGotUpdatedMessages (QList<Message_ptr>, QStringList)));
 		connect (W_,
 				SIGNAL (gotOtherMessages (QList<QByteArray>, QStringList)),
 				A_,

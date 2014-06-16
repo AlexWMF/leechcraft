@@ -55,8 +55,9 @@ namespace Snails
 		Q_OBJECT
 
 		friend class AccountThreadWorker;
-		AccountThread *Thread_;
-		QMutex *AccMutex_;
+		AccountThread * const Thread_;
+		AccountThread * const MessageFetchThread_;
+		QMutex * const AccMutex_;
 
 		QByteArray ID_;
 
@@ -143,7 +144,7 @@ namespace Snails
 		QString GetType () const;
 
 		AccountFolderManager* GetFolderManager () const;
-		QAbstractItemModel* GetMailModel () const;
+		MailModel* GetMailModel () const;
 		QAbstractItemModel* GetFoldersModel () const;
 
 		void ShowFolder (const QModelIndex&);
@@ -154,6 +155,8 @@ namespace Snails
 		void SendMessage (Message_ptr);
 		void FetchAttachment (Message_ptr,
 				const QString&, const QString&);
+
+		void SetReadStatus (bool, const QList<QByteArray>&, const QStringList&);
 
 		void Update (const Message_ptr&);
 
@@ -177,9 +180,9 @@ namespace Snails
 		void buildInURL (QString*);
 		void buildOutURL (QString*);
 		void getPassword (QString*, Direction = Direction::In);
-		void handleMsgHeaders (QList<Message_ptr>);
-		void handleGotUpdatedMessages (QList<Message_ptr>);
-		void handleGotOtherMessages (QList<QByteArray>, QStringList);
+		void handleMsgHeaders (const QList<Message_ptr>&, const QStringList&);
+		void handleGotUpdatedMessages (const QList<Message_ptr>&, const QStringList&);
+		void handleGotOtherMessages (const QList<QByteArray>&, const QStringList&);
 		void handleGotFolders (QList<QStringList>);
 		void handleFoldersUpdated ();
 		void handleMessageBodyFetched (Message_ptr);
