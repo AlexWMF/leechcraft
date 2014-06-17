@@ -47,6 +47,9 @@ namespace Snails
 	class Account;
 	class MessageChangeListener;
 
+	typedef std::vector<vmime::shared_ptr<vmime::net::message>> MessageVector_t;
+	typedef vmime::shared_ptr<vmime::net::folder> VmimeFolder_ptr;
+
 	class AccountThreadWorker : public QObject
 	{
 		Q_OBJECT
@@ -68,22 +71,30 @@ namespace Snails
 		vmime::shared_ptr<vmime::net::store> MakeStore ();
 		vmime::shared_ptr<vmime::net::transport> MakeTransport ();
 
-		vmime::shared_ptr<vmime::net::folder> GetFolder (const QStringList& folder, int mode);
+		VmimeFolder_ptr GetFolder (const QStringList& folder, int mode);
 
 		Message_ptr FromHeaders (const vmime::shared_ptr<vmime::net::message>&) const;
 		void FetchMessagesPOP3 (Account::FetchFlags);
-		void FetchMessagesIMAP (Account::FetchFlags, const QList<QStringList>&, vmime::shared_ptr<vmime::net::store>);
-		void FetchMessagesInFolder (const QStringList&, vmime::shared_ptr<vmime::net::folder>);
+
+		void FetchMessagesIMAP (Account::FetchFlags, const QList<QStringList>&,
+				vmime::shared_ptr<vmime::net::store>, const QByteArray&);
+		MessageVector_t GetMessagesInFolder (const VmimeFolder_ptr&, const QByteArray&);
+		void FetchMessagesInFolder (const QStringList&, const VmimeFolder_ptr&, const QByteArray&);
+
 		void SyncIMAPFolders (vmime::shared_ptr<vmime::net::store>);
 		QList<Message_ptr> FetchFullMessages (const std::vector<vmime::shared_ptr<vmime::net::message>>&);
 		ProgressListener* MkPgListener (const QString&);
 	private slots:
 		void handleMessagesChanged (const QStringList& folder, const QList<int>& numbers);
 	public slots:
-		void synchronize (LeechCraft::Snails::Account::FetchFlags, const QList<QStringList>&);
+		void synchronize (LeechCraft::Snails::Account::FetchFlags, const QList<QStringList>&, const QByteArray& last);
+
+		void getMessageCount (const QStringList& folder, QObject *handler, const QByteArray& slot);
+
 		void setReadStatus (bool read, const QList<QByteArray>& ids, const QStringList& folder);
 		void fetchWholeMessage (LeechCraft::Snails::Message_ptr);
 		void fetchAttachment (LeechCraft::Snails::Message_ptr, const QString&, const QString&);
+
 		void sendMessage (LeechCraft::Snails::Message_ptr);
 	signals:
 		void error (const QString&);
@@ -94,6 +105,8 @@ namespace Snails
 		void gotUpdatedMessages (QList<Message_ptr>, QStringList);
 		void gotOtherMessages (QList<QByteArray>, QStringList);
 		void gotFolders (QList<QStringList>);
+
+		void folderSyncFinished (const QStringList& folder, const QByteArray& lastRequestedId);
 	};
 }
 }

@@ -149,7 +149,7 @@ namespace Snails
 
 		void ShowFolder (const QModelIndex&);
 		void Synchronize (FetchFlags);
-		void Synchronize (const QStringList&);
+		void Synchronize (const QStringList&, const QByteArray&);
 
 		void FetchWholeMessage (Message_ptr);
 		void SendMessage (Message_ptr);
@@ -180,11 +180,17 @@ namespace Snails
 		void buildInURL (QString*);
 		void buildOutURL (QString*);
 		void getPassword (QString*, Direction = Direction::In);
+
 		void handleMsgHeaders (const QList<Message_ptr>&, const QStringList&);
 		void handleGotUpdatedMessages (const QList<Message_ptr>&, const QStringList&);
 		void handleGotOtherMessages (const QList<QByteArray>&, const QStringList&);
+
+		void handleFolderSyncFinished (const QStringList&, const QByteArray&);
+		void handleMessageCountFetched (int, const QStringList&);
+
 		void handleGotFolders (QList<QStringList>);
 		void handleFoldersUpdated ();
+
 		void handleMessageBodyFetched (Message_ptr);
 	signals:
 		void mailChanged ();
