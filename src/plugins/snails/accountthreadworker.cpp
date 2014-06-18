@@ -429,76 +429,67 @@ namespace Snails
 		}
 	}
 
-	MessageVector_t AccountThreadWorker::GetMessagesInFolder (const VmimeFolder_ptr& folder,const QByteArray& lastId)
+	namespace
 	{
-		if (lastId.isEmpty ())
+		MessageVector_t GetMessagesInFolder (const VmimeFolder_ptr& folder, const QByteArray& lastId)
 		{
-			const auto count = folder->getMessageCount ();
-
-			MessageVector_t messages;
-			messages.reserve (count);
-
-			const auto chunkSize = 100;
-			for (int i = 0; i < count; i += chunkSize)
+			if (lastId.isEmpty ())
 			{
-				const auto endVal = i + chunkSize;
-				const auto& set = vmime::net::messageSet::byNumber (i + 1, std::min (count, endVal));
+				const auto count = folder->getMessageCount ();
+
+				MessageVector_t messages;
+				messages.reserve (count);
+
+				const auto chunkSize = 100;
+				for (int i = 0; i < count; i += chunkSize)
+				{
+					const auto endVal = i + chunkSize;
+					const auto& set = vmime::net::messageSet::byNumber (i + 1, std::min (count, endVal));
+					try
+					{
+						const auto& theseMessages = folder->getMessages (set);
+						std::move (theseMessages.begin (), theseMessages.end (), std::back_inserter (messages));
+					}
+					catch (const std::exception& e)
+					{
+						qWarning () << Q_FUNC_INFO
+								<< "cannot get messages from"
+								<< i + 1
+								<< "to"
+								<< endVal
+								<< "because:"
+								<< e.what ();
+						return {};
+					}
+				}
+
+				return messages;
+			}
+			else
+			{
+				const auto& set = vmime::net::messageSet::byUID (lastId.constData (), "*");
 				try
 				{
-					const auto& theseMessages = folder->getMessages (set);
-					std::move (theseMessages.begin (), theseMessages.end (), std::back_inserter (messages));
+					return folder->getMessages (set);
 				}
 				catch (const std::exception& e)
 				{
 					qWarning () << Q_FUNC_INFO
 							<< "cannot get messages from"
-							<< i + 1
-							<< "to"
-							<< endVal
+							<< lastId
 							<< "because:"
 							<< e.what ();
 					return {};
 				}
 			}
-
-			return messages;
-		}
-		else
-		{
-			const auto& set = vmime::net::messageSet::byUID (lastId.constData (), "*");
-			try
-			{
-				return folder->getMessages (set);
-			}
-			catch (const std::exception& e)
-			{
-				qWarning () << Q_FUNC_INFO
-						<< "cannot get messages from"
-						<< lastId
-						<< "because:"
-						<< e.what ();
-				return {};
-			}
 		}
 	}
 
-	void AccountThreadWorker::FetchMessagesInFolder (const QStringList& folderName,
-			const VmimeFolder_ptr& folder, const QByteArray& lastId)
+	QList<Message_ptr> AccountThreadWorker::FetchVmimeMessages (MessageVector_t messages,
+			const VmimeFolder_ptr& folder, const QStringList& folderName)
 	{
-		const auto& changeGuard = ChangeListener_->Disable ();
-		Q_UNUSED (changeGuard)
-
-		const std::shared_ptr<void> syncFinishedGuard
-		{
-			nullptr,
-			[this, &folderName, &lastId] (void*) { emit folderSyncFinished (folderName, lastId); }
-		};
-
-		qDebug () << Q_FUNC_INFO << folderName << folder.get () << lastId;
-
-		auto messages = GetMessagesInFolder (folder, lastId);
 		if (!messages.size ())
-			return;
+			return {};
 
 		const int desiredFlags = vmime::net::fetchAttributes::FLAGS |
 					vmime::net::fetchAttributes::SIZE |
@@ -517,17 +508,15 @@ namespace Snails
 			qWarning () << Q_FUNC_INFO
 					<< "fetch operation not supported:"
 					<< ons.what ();
-			return;
+			return {};
 		}
 		catch (const std::exception& e)
 		{
 			qWarning () << Q_FUNC_INFO
 					<< "generally something bad happened:"
 					<< e.what ();
-			return;
+			return {};
 		}
-
-		const auto& existing = Core::Instance ().GetStorage ()->LoadIDs (A_, folderName);
 
 		QList<Message_ptr> newMessages;
 		std::transform (messages.begin (), messages.end (), std::back_inserter (newMessages),
@@ -537,6 +526,26 @@ namespace Snails
 					res->AddFolder (folderName);
 					return res;
 				});
+		return newMessages;
+	}
+
+	void AccountThreadWorker::FetchMessagesInFolder (const QStringList& folderName,
+			const VmimeFolder_ptr& folder, const QByteArray& lastId)
+	{
+		const auto& changeGuard = ChangeListener_->Disable ();
+		Q_UNUSED (changeGuard)
+
+		const std::shared_ptr<void> syncFinishedGuard
+		{
+			nullptr,
+			[this, &folderName, &lastId] (void*) { emit folderSyncFinished (folderName, lastId); }
+		};
+
+		qDebug () << Q_FUNC_INFO << folderName << folder.get () << lastId;
+
+		auto messages = GetMessagesInFolder (folder, lastId);
+		auto newMessages = FetchVmimeMessages (messages, folder, folderName);
+		auto existing = Core::Instance ().GetStorage ()->LoadIDs (A_, folderName);
 
 		QList<QByteArray> ids;
 
@@ -546,6 +555,7 @@ namespace Snails
 			if (!existing.contains (msg->GetID ()))
 				continue;
 
+			existing.removeAll (msg->GetID ());
 			newMessages.removeAll (msg);
 
 			bool isUpdated = false;
@@ -577,6 +587,7 @@ namespace Snails
 
 		emit gotMsgHeaders (newMessages, folderName);
 		emit gotUpdatedMessages (updatedMessages, folderName);
+		emit gotMessagesRemoved (existing, folderName);
 	}
 
 	namespace
