@@ -49,6 +49,7 @@ namespace Snails
 	class AccountThreadWorker;
 	class AccountFolderManager;
 	class MailModel;
+	class FoldersModel;
 
 	class Account : public QObject
 	{
@@ -127,14 +128,9 @@ namespace Snails
 		OutType OutType_;
 
 		AccountFolderManager *FolderManager_;
-		QStandardItemModel *FoldersModel_;
+		FoldersModel *FoldersModel_;
 
 		MailModel * const MailModel_;
-
-		enum FoldersRole
-		{
-			Path = Qt::UserRole + 1
-		};
 	public:
 		Account (QObject* = 0);
 
@@ -184,6 +180,7 @@ namespace Snails
 		void handleMsgHeaders (const QList<Message_ptr>&, const QStringList&);
 		void handleGotUpdatedMessages (const QList<Message_ptr>&, const QStringList&);
 		void handleGotOtherMessages (const QList<QByteArray>&, const QStringList&);
+		void handleMessagesRemoved (const QList<QByteArray>&, const QStringList&);
 
 		void handleFolderSyncFinished (const QStringList&, const QByteArray&);
 		void handleMessageCountFetched (int, const QStringList&);

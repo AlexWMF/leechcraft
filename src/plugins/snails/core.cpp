@@ -40,6 +40,7 @@
 #endif
 
 #include <util/sys/resourceloader.h>
+#include <util/sll/delayedexecutor.h>
 #include "message.h"
 #include "storage.h"
 #include "progressmanager.h"
@@ -79,13 +80,13 @@ namespace Snails
 
 		qRegisterMetaTypeStreamOperators<AttDescr> ();
 
-		QStringList headers;
-		headers << tr ("Name")
-				<< tr ("Server")
-				<< tr ("Type");
-		AccountsModel_->setHorizontalHeaderLabels (headers);
+		AccountsModel_->setHorizontalHeaderLabels ({ tr ("Name"), tr ("Server"), tr ("Type") });
 
-		LoadAccounts ();
+		new Util::DelayedExecutor
+		{
+			[this] { LoadAccounts (); },
+			0
+		};
 	}
 
 	Core& Core::Instance ()

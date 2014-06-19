@@ -28,6 +28,7 @@
  **********************************************************************/
 
 #include "accountthread.h"
+#include <QMutexLocker>
 #include <QtDebug>
 #include "account.h"
 #include "accountthreadworker.h"
@@ -44,22 +45,27 @@ namespace Snails
 	{
 	}
 
-	TaskQueueManager* AccountThread::GetTaskManager () const
+	void AccountThread::AddTask (const TaskQueueItem& item)
 	{
-		return QueueManager_;
-	}
+		QMutexLocker guard { &QueueMutex_ };
 
-	AccountThreadWorker* AccountThread::GetWorker () const
-	{
-		return W_;
+		if (QueueManager_)
+			QueueManager_->AddTasks ({ item });
+		else
+			PendingQueue_ << item;
 	}
 
 	void AccountThread::run ()
 	{
 		W_ = new AccountThreadWorker { IsListening_, A_ };
-		QueueManager_ = new TaskQueueManager { W_ };
-
 		ConnectSignals ();
+
+		{
+			QMutexLocker guard { &QueueMutex_ };
+			QueueManager_ = new TaskQueueManager { W_ };
+			QueueManager_->AddTasks (PendingQueue_);
+			PendingQueue_.clear ();
+		}
 
 		QThread::run ();
 
@@ -70,13 +76,14 @@ namespace Snails
 	void AccountThread::ConnectSignals ()
 	{
 		connect (W_,
-				SIGNAL (gotMsgHeaders (QList<Message_ptr>, QStringList)),
-				A_,
-				SLOT (handleMsgHeaders (QList<Message_ptr>, QStringList)));
-		connect (W_,
 				SIGNAL (gotProgressListener (ProgressListener_g_ptr)),
 				A_,
 				SIGNAL (gotProgressListener (ProgressListener_g_ptr)));
+
+		connect (W_,
+				SIGNAL (gotMsgHeaders (QList<Message_ptr>, QStringList)),
+				A_,
+				SLOT (handleMsgHeaders (QList<Message_ptr>, QStringList)));
 		connect (W_,
 				SIGNAL (messageBodyFetched (Message_ptr)),
 				A_,
@@ -90,6 +97,11 @@ namespace Snails
 				A_,
 				SLOT (handleGotOtherMessages (QList<QByteArray>, QStringList)));
 		connect (W_,
+				SIGNAL (gotMessagesRemoved (QList<QByteArray>, QStringList)),
+				A_,
+				SLOT (handleMessagesRemoved (QList<QByteArray>, QStringList)));
+
+		connect (W_,
 				SIGNAL (gotFolders (QList<QStringList>)),
 				A_,
 				SLOT (handleGotFolders (QList<QStringList>)));
@@ -97,6 +109,7 @@ namespace Snails
 				SIGNAL (folderSyncFinished (QStringList, QByteArray)),
 				A_,
 				SLOT (handleFolderSyncFinished (QStringList, QByteArray)));
+
 		connect (W_,
 				SIGNAL (gotEntity (LeechCraft::Entity)),
 				&Core::Instance (),

@@ -43,6 +43,7 @@
 #include "accountfoldermanager.h"
 #include "mailmodel.h"
 #include "taskqueuemanager.h"
+#include "foldersmodel.h"
 
 Q_DECLARE_METATYPE (QList<QStringList>)
 Q_DECLARE_METATYPE (QList<QByteArray>)
@@ -68,7 +69,7 @@ namespace Snails
 	, APOP_ (false)
 	, APOPFail_ (false)
 	, FolderManager_ (new AccountFolderManager (this))
-	, FoldersModel_ (new QStandardItemModel (this))
+	, FoldersModel_ (new FoldersModel (this))
 	, MailModel_ (new MailModel (this))
 	{
 		Thread_->start (QThread::IdlePriority);
@@ -132,7 +133,7 @@ namespace Snails
 	{
 		MailModel_->Clear ();
 
-		const auto& path = idx.data (FoldersRole::Path).toStringList ();
+		const auto& path = idx.data (FoldersModel::Role::FolderPath).toStringList ();
 		qDebug () << Q_FUNC_INFO << path;
 		if (path.isEmpty ())
 			return;
@@ -159,7 +160,7 @@ namespace Snails
 		if (folders.isEmpty ())
 			folders << QStringList ("INBOX");
 
-		Thread_->GetTaskManager ()->AddTask ({
+		Thread_->AddTask ({
 				"synchronize",
 				{
 					{ flags },
@@ -171,7 +172,7 @@ namespace Snails
 
 	void Account::Synchronize (const QStringList& path, const QByteArray& last)
 	{
-		Thread_->GetTaskManager ()->AddTask ({
+		Thread_->AddTask ({
 				"synchronize",
 				{
 					Account::FetchFlags { FetchFlag::FetchAll },
@@ -184,7 +185,7 @@ namespace Snails
 
 	void Account::FetchWholeMessage (Message_ptr msg)
 	{
-		MessageFetchThread_->GetTaskManager ()->AddTask ({
+		MessageFetchThread_->AddTask ({
 				"fetchWholeMessage",
 				{ msg }
 			});
@@ -199,7 +200,7 @@ namespace Snails
 			pair.second = UserEmail_;
 		msg->SetAddress (Message::Address::From, pair);
 
-		MessageFetchThread_->GetTaskManager ()->AddTask ({
+		MessageFetchThread_->AddTask ({
 				"sendMessage",
 				{ msg }
 			});
@@ -208,7 +209,7 @@ namespace Snails
 	void Account::FetchAttachment (Message_ptr msg,
 			const QString& attName, const QString& path)
 	{
-		MessageFetchThread_->GetTaskManager ()->AddTask ({
+		MessageFetchThread_->AddTask ({
 				"fetchAttachment",
 				{
 					msg,
@@ -220,7 +221,7 @@ namespace Snails
 
 	void Account::SetReadStatus (bool read, const QList<QByteArray>& ids, const QStringList& folder)
 	{
-		MessageFetchThread_->GetTaskManager ()->AddTask ({
+		MessageFetchThread_->AddTask ({
 				"setReadStatus",
 				{
 					read,
@@ -636,12 +637,22 @@ namespace Snails
 		MailModel_->Append (msgs);
 	}
 
+	void Account::handleMessagesRemoved (const QList<QByteArray>& ids, const QStringList& folder)
+	{
+		qDebug () << Q_FUNC_INFO << ids.size () << folder;
+		for (const auto& id : ids)
+		{
+			Core::Instance ().GetStorage ()->RemoveMessage (this, folder, id);
+			MailModel_->Remove (id);
+		}
+	}
+
 	void Account::handleFolderSyncFinished (const QStringList& folder, const QByteArray& lastRequestedId)
 	{
 		if (lastRequestedId.isEmpty ())
 			return;
 
-		Thread_->GetTaskManager ()->AddTask ({
+		Thread_->AddTask ({
 				"getMessageCount",
 				{
 					folder,
@@ -653,25 +664,9 @@ namespace Snails
 
 	void Account::handleMessageCountFetched (int count, const QStringList& folder)
 	{
-		qDebug () << Q_FUNC_INFO << folder << count;
-	}
-
-	namespace
-	{
-		QStandardItem* BuildFolderItem (QStringList folder, QStandardItem *root)
-		{
-			if (folder.isEmpty ())
-				return root;
-
-			const QString name = folder.takeFirst ();
-			for (int i = 0; i < root->rowCount (); ++i)
-				if (root->child (i)->text () == name)
-					return BuildFolderItem (folder, root->child (i));
-
-			QStandardItem *item = new QStandardItem (name);
-			root->appendRow (item);
-			return BuildFolderItem (folder, item);
-		}
+		const auto storedCount = Core::Instance ().GetStorage ()->GetNumMessages (this, folder);
+		if (count != storedCount)
+			Synchronize (folder, {});
 	}
 
 	void Account::handleGotFolders (QList<QStringList> folders)
@@ -681,13 +676,7 @@ namespace Snails
 
 	void Account::handleFoldersUpdated ()
 	{
-		FoldersModel_->clear ();
-		for (const auto& folder : FolderManager_->GetFolders ())
-		{
-			auto item = BuildFolderItem (folder, FoldersModel_->invisibleRootItem ());
-			item->setData (folder, FoldersRole::Path);
-			item->setEditable (false);
-		}
+		FoldersModel_->SetFolders (FolderManager_->GetFolders ());
 	}
 
 	void Account::handleMessageBodyFetched (Message_ptr msg)

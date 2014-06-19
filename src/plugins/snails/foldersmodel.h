@@ -29,15 +29,10 @@
 
 #pragma once
 
-#include <QObject>
-#include <QDir>
-#include <QSettings>
-#include <QHash>
-#include <QSet>
-#include "message.h"
-
-class QSqlDatabase;
-typedef std::shared_ptr<QSqlDatabase> QSqlDatabase_ptr;
+#include <memory>
+#include <QAbstractItemModel>
+#include <QStringList>
+#include "common.h"
 
 namespace LeechCraft
 {
@@ -45,43 +40,38 @@ namespace Snails
 {
 	class Account;
 
-	class Storage : public QObject
+	struct FolderDescr;
+	typedef std::shared_ptr<FolderDescr> FolderDescr_ptr;
+
+	class FoldersModel : public QAbstractItemModel
 	{
-		Q_OBJECT
+		const QStringList Headers_;
 
-		QDir SDir_;
-		QSettings Settings_;
-		QHash<QByteArray, bool> IsMessageRead_;
-
-		QHash<Account*, QSqlDatabase_ptr> AccountBases_;
-		QHash<Account*, QHash<QByteArray, Message_ptr>> PendingSaveMessages_;
-
-		QHash<QObject*, Account*> FutureWatcher2Account_;
+		FolderDescr_ptr RootFolder_;
+		QHash<QStringList, FolderDescr*> Folder2Descr_;
 	public:
-		Storage (QObject* = 0);
+		enum Role
+		{
+			FolderPath = Qt::UserRole + 1
+		};
 
-		void SaveMessages (Account*, const QStringList& folders, const QList<Message_ptr>&);
-		MessageSet LoadMessages (Account*);
-		Message_ptr LoadMessage (Account*, const QStringList& folder, const QByteArray& id);
-		QList<QByteArray> LoadIDs (Account*, const QStringList& folder);
-		void RemoveMessage (Account*, const QStringList&, const QByteArray&);
+		enum Column
+		{
+			FolderName,
+			MessageCount
+		};
 
-		int GetNumMessages (Account*) const;
-		int GetNumMessages (Account*, const QStringList& folder);
-		bool HasMessagesIn (Account*) const;
+		FoldersModel (Account*);
 
-		bool IsMessageRead (Account*, const QStringList& folder, const QByteArray&);
-	private:
-		void RemoveMessageFromDB (Account*, const QStringList&, const QByteArray&);
-		void RemoveMessageFile (Account*, const QStringList&, const QByteArray&);
-	private:
-		QDir DirForAccount (Account*) const;
-		QSqlDatabase_ptr BaseForAccount (Account*);
+		QVariant headerData (int, Qt::Orientation, int) const;
+		int columnCount (const QModelIndex& = {}) const;
+		QVariant data (const QModelIndex&, int) const;
+		QModelIndex index (int, int, const QModelIndex& = {}) const;
+		QModelIndex parent (const QModelIndex&) const;
+		int rowCount (const QModelIndex& = {}) const;
 
-		void AddMsgToFolders (Message_ptr, Account*);
-		void UpdateCaches (Message_ptr);
-	private slots:
-		void handleMessagesSaved ();
+		void SetFolders (const QList<QStringList>& folders);
+		void SetFolderMessageCount (const QStringList&, int);
 	};
 }
 }
