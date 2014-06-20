@@ -41,9 +41,22 @@ namespace Snails
 
 	TaskQueueItem::TaskQueueItem (const QByteArray& method,
 			const QList<ValuedMetaArgument>& args, const QByteArray& id)
-	: Method_ { method }
+	: TaskQueueItem { Priority::Normal, method, args, id }
+	{
+	}
+
+	TaskQueueItem::TaskQueueItem (int priority, const QByteArray& method,
+			const QList<ValuedMetaArgument>& args, const QByteArray& id)
+	: Priority_ { priority }
+	, Method_ { method }
 	, Args_ (args)
 	, ID_ { id }
+	{
+	}
+
+	TaskQueueItem::TaskQueueItem (Priority priority,
+			const QByteArray& method, const QList<ValuedMetaArgument>& args, const QByteArray& id)
+	: TaskQueueItem { static_cast<int> (priority), method, args, id }
 	{
 	}
 
@@ -80,9 +93,13 @@ namespace Snails
 						std::any_of (Items_.begin (), Items_.end (),
 								[&item] (const TaskQueueItem& other)
 									{ return item.ID_ == other.ID_; }))
-					continue;;
+					continue;
 
-				Items_ << item;
+				const auto pos = std::lower_bound (Items_.begin (), Items_.end (),
+						item,
+						[] (const TaskQueueItem& left, const TaskQueueItem& right)
+							{ return left.Priority_ < right.Priority_; });
+				Items_.insert (pos, item);
 			}
 
 			if (Items_.isEmpty ())
@@ -102,7 +119,7 @@ namespace Snails
 	TaskQueueItem TaskQueueManager::PopItem ()
 	{
 		QMutexLocker locker { &ItemsMutex_ };
-		return Items_.isEmpty () ? TaskQueueItem {} : Items_.takeFirst ();
+		return Items_.isEmpty () ? TaskQueueItem {} : Items_.takeLast ();
 	}
 
 	void TaskQueueManager::rotateTaskQueue ()
