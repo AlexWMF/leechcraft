@@ -40,10 +40,12 @@
 #include <QProcessEnvironment>
 #include <QApplication>
 #include <QClipboard>
+#include <QTimer>
 #include <QtDebug>
 #include <qtermwidget.h>
 #include <util/sll/slotclosure.h>
 #include <util/xpc/util.h>
+#include <util/xpc/stddatafiltermenucreator.h>
 #include <util/shortcuts/shortcutmanager.h>
 #include <interfaces/core/ientitymanager.h>
 #include <interfaces/core/iiconthememanager.h>
@@ -94,7 +96,7 @@ namespace Eleeminator
 				this,
 				SLOT (handleUrlActivated (QUrl)));
 
-		auto savedFontVar = XmlSettingsManager::Instance ().property ("Font");
+		const auto& savedFontVar = XmlSettingsManager::Instance ().property ("Font");
 		if (!savedFontVar.isNull () && savedFontVar.canConvert<QFont> ())
 			Term_->setTerminalFont (savedFontVar.value<QFont> ());
 
@@ -115,6 +117,13 @@ namespace Eleeminator
 				SIGNAL (bell (QString)),
 				this,
 				SLOT (handleBell (QString)));
+
+		auto timer = new QTimer { this };
+		connect (timer,
+				SIGNAL (timeout ()),
+				this,
+				SLOT (updateTitle ()));
+		timer->start (3000);
 	}
 
 	TabClassInfo TermTab::GetTabClassInfo () const
@@ -143,6 +152,16 @@ namespace Eleeminator
 		}
 
 		handleFinished ();
+	}
+
+	void TermTab::TabMadeCurrent ()
+	{
+		IsTabCurrent_ = true;
+	}
+
+	void TermTab::TabLostCurrent ()
+	{
+		IsTabCurrent_ = false;
 	}
 
 	void TermTab::SetupToolbar ()
@@ -239,6 +258,10 @@ namespace Eleeminator
 				SLOT (pasteClipboard ()));
 		pasteAct->setEnabled (!QApplication::clipboard ()->text (QClipboard::Clipboard).isEmpty ());
 
+		const auto& selected = Term_->selectedText ();
+		if (!selected.isEmpty ())
+			new Util::StdDataFilterMenuCreator { selected, CoreProxy_->GetEntityManager (), &menu };
+
 		menu.exec (Term_->mapToGlobal (point));
 	}
 
@@ -296,6 +319,23 @@ namespace Eleeminator
 		XmlSettingsManager::Instance ().setProperty ("Font", QVariant::fromValue (font));
 	}
 
+	void TermTab::updateTitle ()
+	{
+		auto cwd = Term_->workingDirectory ();
+		while (cwd.endsWith ('/'))
+			cwd.chop (1);
+
+		const auto& tree = ProcessGraphBuilder { Term_->getShellPID () }.GetProcessTree ();
+		const auto& processName = tree.Children_.isEmpty () ?
+				tree.Command_ :
+				tree.Children_.value (0).Command_;
+
+		const auto& title = cwd.isEmpty () ?
+				processName :
+				(cwd.section ('/', -1, -1) + " : " + processName);
+		emit changeTabName (this, title);
+	}
+
 	void TermTab::handleUrlActivated (const QUrl& url)
 	{
 		const auto& entity = Util::MakeEntity (url, {}, TaskParameter::FromUserInitiated);
@@ -304,6 +344,13 @@ namespace Eleeminator
 
 	void TermTab::handleBell (const QString&)
 	{
+		auto e = Util::MakeAN ("Eleeminator", tr ("Bell in terminal."), PInfo_,
+				"org.LeechCraft.Eleeminator", AN::CatTerminal, AN::TypeTerminalBell,
+				"org.LeechCraft.Eleeminator.BellEvent",
+				{ "Eleeminator", tr ("Bell") });
+		e.Mime_ += "+advanced";
+		e.Additional_ [AN::Field::TerminalActive] = IsTabCurrent_;
+		CoreProxy_->GetEntityManager ()->HandleEntity (e);
 	}
 
 	void TermTab::handleFinished ()

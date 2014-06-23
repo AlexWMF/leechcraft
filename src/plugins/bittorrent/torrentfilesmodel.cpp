@@ -203,40 +203,40 @@ namespace LeechCraft
 
 				if (role == Qt::CheckStateRole)
 				{
-					static_cast<TreeItem*> (index.internalPointer ())->
-						ModifyData (0, value, Qt::CheckStateRole);
+					static_cast<TreeItem*> (index.internalPointer ())->ModifyData (0, value, Qt::CheckStateRole);
 					emit dataChanged (index, index);
 
 					int rows = rowCount (index);
 					for (int i = 0; i < rows; ++i)
 						setData (this->index (i, 0, index), value, role);
 
-					QModelIndex pi = parent (index);
+					auto pi = parent (index);
 					while (pi.isValid ())
 					{
 						bool hasChecked = false;
 						bool hasUnchecked = false;
-						int prows = rowCount (pi);
+						const auto prows = rowCount (pi);
 						for (int i = 0; i < prows; ++i)
 						{
 							int state = this->index (i, 0, pi).data (role).toInt ();
 							switch (static_cast<Qt::CheckState> (state))
 							{
-								case Qt::Checked:
-									hasChecked = true;
-									break;
-								case Qt::Unchecked:
-									hasUnchecked = true;
-									break;
-								default:
-									hasChecked = true;
-									hasUnchecked = true;
-									break;
+							case Qt::Checked:
+								hasChecked = true;
+								break;
+							case Qt::Unchecked:
+								hasUnchecked = true;
+								break;
+							default:
+								hasChecked = true;
+								hasUnchecked = true;
+								break;
 							}
 							if (hasChecked && hasUnchecked)
 								break;
 						}
-						Qt::CheckState state = Qt::Unchecked;
+
+						auto state = Qt::Unchecked;
 						if (hasChecked && hasUnchecked)
 							state = Qt::PartiallyChecked;
 						else if (hasChecked)
@@ -247,9 +247,11 @@ namespace LeechCraft
 							qWarning () << Q_FUNC_INFO
 								<< pi
 								<< "we have neither checked nor unchecked items. Strange.";
+
 						static_cast<TreeItem*> (pi.internalPointer ())->
 							ModifyData (0, state, Qt::CheckStateRole);
 						emit dataChanged (pi, pi);
+
 						pi = parent (pi);
 					}
 
@@ -449,8 +451,7 @@ namespace LeechCraft
 
 				for (Path2TreeItem_t::const_iterator i = Path2TreeItem_.begin (),
 						end = Path2TreeItem_.end (); i != end; ++i)
-					if (!i->second->ChildCount ())
-						i->second->ModifyData (0, Qt::Checked, Qt::CheckStateRole);
+					i->second->ModifyData (0, Qt::Checked, Qt::CheckStateRole);
 				emit dataChanged (index (0, 0), index (RootItem_->ChildCount () - 1, 1));
 			}
 
@@ -461,31 +462,20 @@ namespace LeechCraft
 
 				for (Path2TreeItem_t::const_iterator i = Path2TreeItem_.begin (),
 						end = Path2TreeItem_.end (); i != end; ++i)
-					if (!i->second->ChildCount ())
-						i->second->ModifyData (0, Qt::Unchecked, Qt::CheckStateRole);
+					i->second->ModifyData (0, Qt::Unchecked, Qt::CheckStateRole);
 				emit dataChanged (index (0, 0), index (RootItem_->ChildCount () - 1, 1));
 			}
 
 			void TorrentFilesModel::MarkIndexes (const QList<QModelIndex>& indexes)
 			{
-				for (int i = 0; i < indexes.size (); ++i)
-				{
-					TreeItem *item = static_cast<TreeItem*> (indexes.at (i).internalPointer ());
-					if (!item->ChildCount ())
-						item->ModifyData (0, Qt::Checked, Qt::CheckStateRole);
-					emit dataChanged (index (indexes.at (i).row (), 0), index (indexes.at (i).row (), 1));
-				}
+				for (const auto& index : indexes)
+					setData (index, Qt::Checked, Qt::CheckStateRole);
 			}
 
 			void TorrentFilesModel::UnmarkIndexes (const QList<QModelIndex>& indexes)
 			{
-				for (int i = 0; i < indexes.size (); ++i)
-				{
-					TreeItem *item = static_cast<TreeItem*> (indexes.at (i).internalPointer ());
-					if (!item->ChildCount ())
-						item->ModifyData (0, Qt::Unchecked, Qt::CheckStateRole);
-					emit dataChanged (index (indexes.at (i).row (), 0), index (indexes.at (i).row (), 1));
-				}
+				for (const auto& index : indexes)
+					setData (index, Qt::Unchecked, Qt::CheckStateRole);
 			}
 
 			void TorrentFilesModel::HandleFileActivated (QModelIndex index) const

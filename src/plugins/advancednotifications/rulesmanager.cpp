@@ -118,6 +118,11 @@ namespace AdvancedNotifications
 		Cat2HR_ [AN::CatMediaPlayer] = tr ("Media player");
 		Type2HR_ [AN::TypeMediaPlaybackStatus] = tr ("Media playback status changed");
 
+		Cat2HR_ [AN::CatTerminal] = tr ("Terminal");
+		Type2HR_ [AN::TypeTerminalBell] = tr ("Bell in a terminal");
+		Type2HR_ [AN::TypeTerminalActivity] = tr ("Activity in a terminal");
+		Type2HR_ [AN::TypeTerminalInactivity] = tr ("Inactivity in a terminal");
+
 		Cat2HR_ [AN::CatGeneric] = tr ("Generic");
 		Type2HR_ [AN::TypeGeneric] = tr ("Generic");
 
@@ -377,6 +382,31 @@ namespace AdvancedNotifications
 			packageUpdated.SetMethods (NMVisual | NMTray | NMSystemDependent);
 			Rules_ << packageUpdated;
 		}
+
+		if (version == -1 || version == 5)
+		{
+			FieldMatch match (QVariant::Bool);
+			match.SetFieldName (AN::Field::TerminalActive);
+			match.GetMatcher ()->SetValue (ANBoolFieldValue { false });
+
+			NotificationRule inactiveBell (tr ("Bell in inactive terminal"), AN::CatTerminal,
+					{ AN::TypeTerminalBell });
+			inactiveBell.AddFieldMatch (match);
+			inactiveBell.SetMethods (NMVisual | NMTray);
+			Rules_ << inactiveBell;
+
+			NotificationRule inactiveActivity (tr ("Activity in inactive terminal"), AN::CatTerminal,
+					{ AN::TypeTerminalActivity });
+			inactiveActivity.AddFieldMatch (match);
+			inactiveActivity.SetMethods (NMVisual | NMTray);
+			Rules_ << inactiveActivity;
+
+			NotificationRule inactiveInactivity (tr ("Inactivity in inactive terminal"), AN::CatTerminal,
+					{ AN::TypeTerminalInactivity });
+			inactiveInactivity.AddFieldMatch (match);
+			inactiveInactivity.SetMethods (NMVisual | NMTray);
+			Rules_ << inactiveInactivity;
+		}
 	}
 
 	void RulesManager::LoadSettings ()
@@ -387,7 +417,7 @@ namespace AdvancedNotifications
 		Rules_ = settings.value ("RulesList").value<QList<NotificationRule>> ();
 		int rulesVersion = settings.value ("DefaultRulesVersion", 1).toInt ();
 
-		const int currentDefVersion = 5;
+		const int currentDefVersion = 6;
 		if (Rules_.isEmpty ())
 			LoadDefaultRules (0);
 

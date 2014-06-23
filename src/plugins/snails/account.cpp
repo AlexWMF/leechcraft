@@ -665,8 +665,10 @@ namespace Snails
 	void Account::handleMessageCountFetched (int count, const QStringList& folder)
 	{
 		const auto storedCount = Core::Instance ().GetStorage ()->GetNumMessages (this, folder);
-		if (count != storedCount)
+		if (storedCount && count != storedCount)
 			Synchronize (folder, {});
+
+		FoldersModel_->SetFolderMessageCount (folder, count);
 	}
 
 	void Account::handleGotFolders (QList<QStringList> folders)
@@ -676,7 +678,32 @@ namespace Snails
 
 	void Account::handleFoldersUpdated ()
 	{
-		FoldersModel_->SetFolders (FolderManager_->GetFolders ());
+		const auto& folders = FolderManager_->GetFolders ();
+		FoldersModel_->SetFolders (folders);
+
+		for (const auto& folder : folders)
+		{
+			int count = -1;
+			try
+			{
+				count = Core::Instance ().GetStorage ()->GetNumMessages (this, folder);
+			}
+			catch (const std::exception&)
+			{
+			}
+
+			FoldersModel_->SetFolderMessageCount (folder, count);
+
+			Thread_->AddTask ({
+					TaskQueueItem::Priority::Lowest,
+					"getMessageCount",
+					{
+						folder,
+						static_cast<QObject*> (this),
+						QByteArray { "handleMessageCountFetched" }
+					}
+				});
+		}
 	}
 
 	void Account::handleMessageBodyFetched (Message_ptr msg)

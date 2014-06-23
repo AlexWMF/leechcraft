@@ -153,10 +153,12 @@ namespace GoogleDrive
 		RequestAccessToken ();
 	}
 
-	void DriveManager::RequestFiles (const QString& key)
+	void DriveManager::RequestFiles (const QString& key, const QString& nextPageToken)
 	{
-		QString str = QString ("https://www.googleapis.com/drive/v2/files?access_token=%1")
+		auto str = QString ("https://www.googleapis.com/drive/v2/files?access_token=%1")
 				.arg (key);
+		if (!nextPageToken.isEmpty ())
+			str += "&pageToken=" + nextPageToken;
 		QNetworkRequest request (str);
 
 		request.setHeader (QNetworkRequest::ContentTypeHeader,
@@ -600,9 +602,6 @@ namespace GoogleDrive
 			const QVariantMap& permission = map ["userPermission"].toMap ();
 			const QString& role = permission ["role"].toString ();
 
-			if (role != "owner")
-				return DriveItem ();
-
 			DriveItem driveItem;
 
 			const QString& type = permission ["type"].toString ();
@@ -721,7 +720,7 @@ namespace GoogleDrive
 
 		SecondRequestIfNoItems_ = true;
 		QList<DriveItem> resList;
-		Q_FOREACH (const auto& item, resMap ["items"].toList ())
+		for (const auto& item : resMap ["items"].toList ())
 		{
 			const auto& driveItem = CreateDriveItem (item);
 			if (driveItem.Name_.isEmpty ())
@@ -730,6 +729,13 @@ namespace GoogleDrive
 		}
 
 		emit gotFiles (resList);
+
+		const auto& nextPageToken = resMap ["nextPageToken"].toString ();
+		if (nextPageToken.isEmpty ())
+			return;
+
+		ApiCallQueue_ << [this, nextPageToken] (const QString& key) { RequestFiles (key, nextPageToken); };
+		RequestAccessToken ();
 	}
 
 	void DriveManager::handleRequestFileSharing ()

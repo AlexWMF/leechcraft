@@ -63,6 +63,11 @@ namespace LeechCraft
 		setUsesScrollButtons (true);
 
 		addTab (QString ());
+
+		connect (this,
+				SIGNAL (currentChanged (int)),
+				this,
+				SLOT (toggleCloseButtons ()));
 	}
 
 	void SeparateTabBar::SetWindow (MainWindow *win)
@@ -168,6 +173,24 @@ namespace LeechCraft
 			ComputedWidths_ [info.Idx_] = uniform;
 	}
 
+	void SeparateTabBar::toggleCloseButtons () const
+	{
+		if (ComputedWidths_.isEmpty ())
+			UpdateComputedWidths ();
+
+		const auto current = currentIndex ();
+		for (int i = 0, cnt = count () - 1; i < cnt; ++i)
+		{
+			const auto button = tabButton (i, GetCloseButtonPosition ());
+			if (!button)
+				continue;
+
+			const auto visible = i == current ||
+					button->width () * 2.5 < ComputedWidths_.value (i);
+			button->setVisible (visible);
+		}
+	}
+
 	void SeparateTabBar::tabLayoutChange ()
 	{
 		ComputedWidths_.clear ();
@@ -181,7 +204,10 @@ namespace LeechCraft
 			return result;
 
 		if (ComputedWidths_.isEmpty ())
+		{
 			UpdateComputedWidths ();
+			toggleCloseButtons ();
+		}
 
 		result.setWidth (ComputedWidths_.value (index));
 		return result;

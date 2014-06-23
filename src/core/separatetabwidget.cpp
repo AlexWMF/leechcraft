@@ -42,6 +42,7 @@
 #include <QStyle>
 #include <QtDebug>
 #include <interfaces/ihavetabs.h>
+#include <interfaces/ihaverecoverabletabs.h>
 #include "coreproxy.h"
 #include "separatetabbar.h"
 #include "xmlsettingsmanager.h"
@@ -324,21 +325,28 @@ namespace LeechCraft
 	QMenu* SeparateTabWidget::GetTabMenu (int index)
 	{
 		QMenu *menu = new QMenu ();
+
+		const auto widget = Widget (index);
+		const auto imtw = qobject_cast<ITabWidget*> (widget);
+
 		if (XmlSettingsManager::Instance ()->
 				property ("ShowPluginMenuInTabs").toBool ())
 		{
 			bool asSub = XmlSettingsManager::Instance ()->
 				property ("ShowPluginMenuInTabsAsSubmenu").toBool ();
-			ITabWidget *imtw = qobject_cast<ITabWidget*> (Widget (index));
 			if (imtw)
 			{
-				QList<QAction*> tabActions = imtw->GetTabBarContextMenuActions ();
+				const auto& tabActions = imtw->GetTabBarContextMenuActions ();
 
-				QMenu *subMenu = new QMenu (TabText (index), menu);
-				Q_FOREACH (QAction *act, tabActions)
+				QMenu *subMenu = asSub ?
+						new QMenu (TabText (index), menu) :
+						nullptr;
+				for (auto act : tabActions)
 					(asSub ? subMenu : menu)->addAction (act);
+
 				if (asSub)
 					menu->addMenu (subMenu);
+
 				if (tabActions.size ())
 					menu->addSeparator ();
 			}
@@ -373,7 +381,19 @@ namespace LeechCraft
 			}
 		}
 
-		Q_FOREACH (QAction *act, TabBarActions_)
+		const auto irt = qobject_cast<IRecoverableTab*> (widget);
+		if (imtw &&
+				irt &&
+				(imtw->GetTabClassInfo ().Features_ & TabFeature::TFOpenableByRequest) &&
+				!(imtw->GetTabClassInfo ().Features_ & TabFeature::TFSingle))
+		{
+			const auto cloneAct = menu->addAction (tr ("Clone tab"),
+					this, SLOT (handleCloneTab ()));
+			cloneAct->setProperty ("TabIndex", index);
+			cloneAct->setProperty ("ActionIcon", "tab-duplicate");
+		}
+
+		for (auto act : TabBarActions_)
 		{
 			if (!act)
 			{
@@ -728,8 +748,7 @@ namespace LeechCraft
 		int index = MainTabBar_->tabAt (point);
 
 		if (index == -1)
-		{
-			Q_FOREACH (QAction *act, TabBarActions_)
+			for (auto act : TabBarActions_)
 			{
 				if (!act)
 				{
@@ -739,11 +758,8 @@ namespace LeechCraft
 				}
 				menu->addAction (act);
 			}
-		}
 		else if (index == MainTabBar_->count () - 1)
-		{
 			menu->addActions (AddTabButtonContextMenu_->actions ());
-		}
 		else
 		{
 			LastContextMenuTab_ = index;
@@ -756,7 +772,7 @@ namespace LeechCraft
 
 	void SeparateTabWidget::handleActionDestroyed ()
 	{
-		Q_FOREACH (QPointer<QAction> act, TabBarActions_)
+		for (const auto& act : TabBarActions_)
 			if (!act || act == sender ())
 				TabBarActions_.removeAll (act);
 	}
@@ -829,9 +845,8 @@ namespace LeechCraft
 		IHaveTabs *highestIHT = 0;
 		QByteArray highestTabClass;
 		int highestPriority = 0;
-		Q_FOREACH (IHaveTabs *iht, Core::Instance ()
-				.GetPluginManager ()->GetAllCastableTo<IHaveTabs*> ())
-			Q_FOREACH (const TabClassInfo& info, iht->GetTabClasses ())
+		for (auto iht : Core::Instance ().GetPluginManager ()->GetAllCastableTo<IHaveTabs*> ())
+			for (const auto& info : iht->GetTabClasses ())
 			{
 				if (!(info.Features_ & TFOpenableByRequest))
 					continue;
@@ -844,7 +859,7 @@ namespace LeechCraft
 				highestPriority = info.Priority_;
 			}
 
-		ITabWidget *imtw = qobject_cast<ITabWidget*> (CurrentWidget ());
+		const auto imtw = qobject_cast<ITabWidget*> (CurrentWidget ());
 		const int delta = 15;
 		if (imtw && imtw->GetTabClassInfo ().Priority_ + delta > highestPriority)
 		{
@@ -860,5 +875,28 @@ namespace LeechCraft
 		}
 
 		highestIHT->TabOpenRequested (highestTabClass);
+	}
+
+	void SeparateTabWidget::handleCloneTab ()
+	{
+		const auto index = sender ()->property ("TabIndex").toInt ();
+		const auto widget = Widget (index);
+		const auto irt = qobject_cast<IRecoverableTab*> (widget);
+
+		const auto plugin = qobject_cast<ITabWidget*> (widget)->ParentMultiTabs ();
+		const auto ihrt = qobject_cast<IHaveRecoverableTabs*> (plugin);
+
+		if (!widget || !irt || !ihrt)
+		{
+			qWarning () << Q_FUNC_INFO
+					<< "something required is null:"
+					<< widget
+					<< irt
+					<< ihrt;
+			return;
+		}
+
+		const auto& data = irt->GetTabRecoverData ();
+		ihrt->RecoverTabs ({ { data, {} } });
 	}
 }

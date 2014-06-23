@@ -437,10 +437,13 @@ namespace Util
 			areaWidget->setLayout (areaLayout);
 			ParseEntity (scroll, areaWidget);
 			area->setWidget (areaWidget);
+			area->setWidgetResizable (true);
 			areaWidget->show ();
 
 			QGridLayout *lay = qobject_cast<QGridLayout*> (baseWidget->layout ());
-			lay->addWidget (area, lay->rowCount (), 0, 1, 2);
+			const auto thisRow = lay->rowCount ();
+			lay->addWidget (area, thisRow, 0, 1, 2);
+			lay->setRowStretch (thisRow, 1);
 
 			scroll = scroll.nextSiblingElement ("scrollarea");
 		}
