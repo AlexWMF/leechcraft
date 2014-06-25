@@ -30,6 +30,7 @@
 #pragma once
 
 #include <QWidget>
+#include <interfaces/core/ihookproxy.h>
 #include "ui_collectionwidget.h"
 
 class QSortFilterProxyModel;
@@ -39,6 +40,7 @@ namespace LeechCraft
 namespace LMP
 {
 	class Player;
+	struct MediaInfo;
 
 	class CollectionWidget : public QWidget
 	{
@@ -49,12 +51,6 @@ namespace LMP
 		Player * const Player_;
 
 		QSortFilterProxyModel * const CollectionFilterModel_;
-
-		QAction *CollectionShowTrackProps_;
-		QAction *CollectionShowAlbumArt_;
-		QAction *CollectionShowAAManager_;
-		QAction *CollectionRemove_;
-		QAction *CollectionDelete_;
 	public:
 		CollectionWidget (QWidget* = nullptr);
 	private slots:
@@ -64,9 +60,13 @@ namespace LMP
 		void handleCollectionRemove ();
 		void handleCollectionDelete ();
 		void loadFromCollection ();
-		void handleCollectionItemSelected (const QModelIndex&);
+		void on_CollectionTree__customContextMenuRequested (const QPoint&);
 
 		void handleScanProgress (int);
+	signals:
+		void hookCollectionContextMenuRequested (LeechCraft::IHookProxy_ptr,
+				QMenu*,
+				const LeechCraft::LMP::MediaInfo&);
 	};
 }
 }

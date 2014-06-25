@@ -231,6 +231,17 @@ namespace Snails
 			});
 	}
 
+	void Account::DeleteMessages (const QList<QByteArray>& ids, const QStringList& folder)
+	{
+		MessageFetchThread_->AddTask ({
+				"deleteMessages",
+				{
+					ids,
+					folder
+				}
+			});
+	}
+
 	void Account::Update (const Message_ptr& message)
 	{
 		MailModel_->Update (message);
@@ -371,10 +382,10 @@ namespace Snails
 			dia->SetInType (InType_);
 			dia->SetOutType (OutType_);
 
-			const auto& folders = FolderManager_->GetFolders ();
+			const auto& folders = FolderManager_->GetFoldersPaths ();
 			dia->SetAllFolders (folders);
 			const auto& toSync = FolderManager_->GetSyncFolders ();
-			Q_FOREACH (const auto& folder, folders)
+			for (const auto& folder : folders)
 			{
 				const auto flags = FolderManager_->GetFolderFlags (folder);
 				if (flags & AccountFolderManager::FolderOutgoing)
@@ -671,7 +682,7 @@ namespace Snails
 		FoldersModel_->SetFolderMessageCount (folder, count);
 	}
 
-	void Account::handleGotFolders (QList<QStringList> folders)
+	void Account::handleGotFolders (const QList<Folder>& folders)
 	{
 		FolderManager_->SetFolders (folders);
 	}
@@ -686,19 +697,19 @@ namespace Snails
 			int count = -1;
 			try
 			{
-				count = Core::Instance ().GetStorage ()->GetNumMessages (this, folder);
+				count = Core::Instance ().GetStorage ()->GetNumMessages (this, folder.Path_);
 			}
 			catch (const std::exception&)
 			{
 			}
 
-			FoldersModel_->SetFolderMessageCount (folder, count);
+			FoldersModel_->SetFolderMessageCount (folder.Path_, count);
 
 			Thread_->AddTask ({
 					TaskQueueItem::Priority::Lowest,
 					"getMessageCount",
 					{
-						folder,
+						folder.Path_,
 						static_cast<QObject*> (this),
 						QByteArray { "handleMessageCountFetched" }
 					}

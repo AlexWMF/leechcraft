@@ -65,14 +65,24 @@ namespace Snails
 		return !Body_.isEmpty () || !HTMLBody_.isEmpty ();
 	}
 
-	QByteArray Message::GetID () const
+	QByteArray Message::GetFolderID () const
 	{
-		return ID_;
+		return FolderID_;
 	}
 
-	void Message::SetID (const QByteArray& id)
+	void Message::SetFolderID (const QByteArray& id)
 	{
-		ID_ = id;
+		FolderID_ = id;
+	}
+
+	QByteArray Message::GetMessageID () const
+	{
+		return MessageID_;
+	}
+
+	void Message::SetMessageID (const QByteArray& id)
+	{
+		MessageID_ = id;
 	}
 
 	QList<QStringList> Message::GetFolders () const
@@ -165,6 +175,21 @@ namespace Snails
 		HTMLBody_ = body;
 	}
 
+	QList<QByteArray> Message::GetInReplyTo () const
+	{
+		return InReplyTo_;
+	}
+
+	void Message::SetInReplyTo (const QList<QByteArray>& irt)
+	{
+		InReplyTo_ = irt;
+	}
+
+	void Message::AddInReplyTo (const QByteArray& irt)
+	{
+		InReplyTo_ << irt;
+	}
+
 	bool Message::IsRead () const
 	{
 		return IsRead_;
@@ -176,7 +201,7 @@ namespace Snails
 		IsRead_ = read;
 
 		if (shouldEmit)
-			emit readStatusChanged (GetID (), read);
+			emit readStatusChanged (GetFolderID (), read);
 	}
 
 	QList<AttDescr> Message::GetAttachments () const
@@ -197,7 +222,8 @@ namespace Snails
 	void Message::Dump () const
 	{
 		qDebug () << Q_FUNC_INFO
-				<< ID_.toHex ()
+				<< FolderID_.toHex ()
+				<< MessageID_
 				<< Folders_
 				<< Size_
 				<< Date_
@@ -205,7 +231,8 @@ namespace Snails
 				<< Subject_
 				<< IsRead_
 				<< Body_
-				<< HTMLBody_;
+				<< HTMLBody_
+				<< InReplyTo_;
 		Q_FOREACH (const auto key, Addresses_.keys ())
 			qDebug () << static_cast<int> (key)
 					<< Addresses_ [key];
@@ -220,7 +247,8 @@ namespace Snails
 
 		QDataStream str (&result, QIODevice::WriteOnly);
 		str << static_cast<quint8> (1)
-			<< ID_
+			<< FolderID_
+			<< MessageID_
 			<< Folders_
 			<< Size_
 			<< Date_
@@ -229,6 +257,7 @@ namespace Snails
 			<< IsRead_
 			<< Body_
 			<< HTMLBody_
+			<< InReplyTo_
 			<< Addresses_
 			<< Attachments_;
 
@@ -243,7 +272,8 @@ namespace Snails
 		if (version != 1)
 			throw std::runtime_error (qPrintable ("Failed to deserialize Message: unknown version " + QString::number (version)));
 
-		str >> ID_
+		str >> FolderID_
+			>> MessageID_
 			>> Folders_
 			>> Size_
 			>> Date_
@@ -252,6 +282,7 @@ namespace Snails
 			>> IsRead_
 			>> Body_
 			>> HTMLBody_
+			>> InReplyTo_
 			>> Addresses_
 			>> Attachments_;
 	}
@@ -268,5 +299,5 @@ namespace Snails
 
 uint qHash (const LeechCraft::Snails::Message_ptr msg)
 {
-	return qHash (msg->GetID ());
+	return qHash (msg->GetFolderID ());
 }

@@ -29,50 +29,38 @@
 
 #pragma once
 
-#include <memory>
-#include <QAbstractItemModel>
 #include <QStringList>
-#include "common.h"
+#include <QMetaType>
+
+class QDataStream;
 
 namespace LeechCraft
 {
 namespace Snails
 {
-	class Account;
-	struct Folder;
-
-	struct FolderDescr;
-	typedef std::shared_ptr<FolderDescr> FolderDescr_ptr;
-
-	class FoldersModel : public QAbstractItemModel
+	enum class FolderType
 	{
-		const QStringList Headers_;
-
-		FolderDescr_ptr RootFolder_;
-		QHash<QStringList, FolderDescr*> Folder2Descr_;
-	public:
-		enum Role
-		{
-			FolderPath = Qt::UserRole + 1
-		};
-
-		enum Column
-		{
-			FolderName,
-			MessageCount
-		};
-
-		FoldersModel (Account*);
-
-		QVariant headerData (int, Qt::Orientation, int) const;
-		int columnCount (const QModelIndex& = {}) const;
-		QVariant data (const QModelIndex&, int) const;
-		QModelIndex index (int, int, const QModelIndex& = {}) const;
-		QModelIndex parent (const QModelIndex&) const;
-		int rowCount (const QModelIndex& = {}) const;
-
-		void SetFolders (const QList<Folder>& folders);
-		void SetFolderMessageCount (const QStringList&, int);
+		Inbox,
+		Drafts,
+		Sent,
+		Important,
+		Junk,
+		Trash,
+		Other
 	};
+
+	struct Folder
+	{
+		QStringList Path_;
+		FolderType Type_;
+	};
+
+	bool operator== (const Folder&, const Folder&);
 }
 }
+
+Q_DECLARE_METATYPE (LeechCraft::Snails::Folder)
+Q_DECLARE_METATYPE (QList<LeechCraft::Snails::Folder>)
+
+QDataStream& operator<< (QDataStream&, const LeechCraft::Snails::Folder&);
+QDataStream& operator>> (QDataStream&, LeechCraft::Snails::Folder&);

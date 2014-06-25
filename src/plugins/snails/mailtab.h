@@ -50,11 +50,12 @@ namespace Snails
 
 		Ui::MailTab Ui_;
 
-		QToolBar *TabToolbar_;
-		QToolBar *MsgToolbar_;
+		QToolBar * const TabToolbar_;
+		QToolBar * const MsgToolbar_;
 
 		QAction *MsgReply_;
 		QAction *MsgMarkUnread_;
+		QAction *MsgRemove_;
 		QMenu *MsgAttachments_;
 
 		TabClassInfo TabClass_;
@@ -71,15 +72,20 @@ namespace Snails
 		void Remove ();
 		QToolBar* GetToolBar () const;
 	private:
-		void FillMsgToolbar ();
+		void FillTabToolbarActions ();
+		QList<QByteArray> GetSelectedIds () const;
 	private slots:
 		void handleCurrentAccountChanged (const QModelIndex&);
 		void handleCurrentTagChanged (const QModelIndex&);
 		void handleMailSelected (const QModelIndex&);
+
 		void handleReply ();
 		void handleMarkMsgUnread ();
+		void handleRemoveMsgs ();
+
 		void handleAttachment ();
 		void handleFetchNewMail ();
+
 		void handleMessageBodyFetched (Message_ptr);
 	signals:
 		void removeTab (QWidget*);

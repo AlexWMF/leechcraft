@@ -47,7 +47,8 @@ namespace Snails
 	{
 		Q_OBJECT
 
-		QByteArray ID_;
+		QByteArray FolderID_;
+		QByteArray MessageID_;
 		QList<QStringList> Folders_;
 		quint64 Size_;
 		QDateTime Date_;
@@ -56,6 +57,8 @@ namespace Snails
 
 		QString Body_;
 		QString HTMLBody_;
+
+		QList<QByteArray> InReplyTo_;
 
 		bool IsRead_;
 
@@ -79,8 +82,16 @@ namespace Snails
 
 		bool IsFullyFetched () const;
 
-		QByteArray GetID () const;
-		void SetID (const QByteArray&);
+		/** @brief Returns folder-specific message ID.
+		 */
+		QByteArray GetFolderID () const;
+
+		/** @brief Sets folder-specific message ID.
+		 */
+		void SetFolderID (const QByteArray& id);
+
+		QByteArray GetMessageID () const;
+		void SetMessageID (const QByteArray&);
 
 		QList<QStringList> GetFolders () const;
 		void AddFolder (const QStringList&);
@@ -106,6 +117,10 @@ namespace Snails
 
 		QString GetHTMLBody () const;
 		void SetHTMLBody (const QString&);
+
+		QList<QByteArray> GetInReplyTo () const;
+		void SetInReplyTo (const QList<QByteArray>&);
+		void AddInReplyTo (const QByteArray&);
 
 		bool IsRead () const;
 		void SetRead (bool);

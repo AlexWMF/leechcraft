@@ -35,12 +35,8 @@
 #include <QMessageBox>
 #include <QFileIconProvider>
 #include <QInputDialog>
-
-#ifdef HAVE_MAGIC
-#include <magic.h>
-#endif
-
 #include <util/util.h>
+#include <util/sys/mimedetector.h>
 #include <interfaces/itexteditor.h>
 #include <interfaces/core/ipluginsmanager.h>
 #include <interfaces/core/iiconthememanager.h>
@@ -82,8 +78,8 @@ namespace Snails
 
 		AccountsMenu_ = new QMenu (tr ("Accounts"));
 		AccountsMenu_->menuAction ()->setProperty ("ActionIcon", "system-users");
-		QActionGroup *accsGroup = new QActionGroup (this);
-		Q_FOREACH (Account_ptr account, Core::Instance ().GetAccounts ())
+		auto accsGroup = new QActionGroup (this);
+		for (const auto& account : Core::Instance ().GetAccounts ())
 		{
 			QAction *act = new QAction (account->GetName (), this);
 			accsGroup->addAction (act);
@@ -114,7 +110,7 @@ namespace Snails
 
 		auto plugs = Core::Instance ().GetProxy ()->
 				GetPluginsManager ()->GetAllCastableTo<ITextEditor*> ();
-		Q_FOREACH (ITextEditor *plug, plugs)
+		for (const auto plug : plugs)
 		{
 			if (!plug->SupportsEditor (ContentType::PlainText))
 				continue;
@@ -157,7 +153,7 @@ namespace Snails
 	void ComposeMessageTab::SelectAccount (Account_ptr account)
 	{
 		const auto& var = QVariant::fromValue<Account_ptr> (account);
-		Q_FOREACH (QAction *action, AccountsMenu_->actions ())
+		for (auto action : AccountsMenu_->actions ())
 			if (action->property ("Account") == var)
 			{
 				action->setChecked (true);
@@ -197,9 +193,8 @@ namespace Snails
 		Message::Addresses_t FromUserInput (const QString& text)
 		{
 			Message::Addresses_t result;
-			const QStringList& split = text.split (',', QString::SkipEmptyParts);
 
-			Q_FOREACH (QString address, split)
+			for (auto address : text.split (',', QString::SkipEmptyParts))
 			{
 				address = address.trimmed ();
 
@@ -229,7 +224,7 @@ namespace Snails
 	void ComposeMessageTab::handleSend ()
 	{
 		Account_ptr account;
-		Q_FOREACH (QAction *act, AccountsMenu_->actions ())
+		for (auto act : AccountsMenu_->actions ())
 		{
 			if (!act->isChecked ())
 				continue;
@@ -246,28 +241,19 @@ namespace Snails
 		message->SetBody (MsgEdit_->GetContents (ContentType::PlainText));
 		message->SetHTMLBody (MsgEdit_->GetContents (ContentType::HTML));
 
-#ifdef HAVE_MAGIC
-		auto Magic_ = std::shared_ptr<magic_set> (magic_open (MAGIC_MIME_TYPE),
-				magic_close);
-		magic_load (Magic_.get (), NULL);
-#endif
+		Util::MimeDetector detector;
 
-		Q_FOREACH (QAction *act, AttachmentsMenu_->actions ())
+		for (auto act : AttachmentsMenu_->actions ())
 		{
-			const QString& path = act->property ("Snails/AttachmentPath").toString ();
+			const auto& path = act->property ("Snails/AttachmentPath").toString ();
 			if (path.isEmpty ())
 				continue;
 
-			const QString& descr = act->property ("Snails/Description").toString ();
+			const auto& descr = act->property ("Snails/Description").toString ();
 
-#ifdef HAVE_MAGIC
-			const QByteArray mime (magic_file (Magic_.get (), path.toUtf8 ().constData ()));
-			const auto& split = mime.split ('/');
-			const QByteArray type = split.value (0);
-			const QByteArray subtype = split.value (1);
-#else
-			const QByteArray type = "application", subtype = "octet-stream";
-#endif
+			const auto& split = detector (path).split ('/');
+			const auto& type = split.value (0);
+			const auto& subtype = split.value (1);
 
 			message->AddAttachment ({ path, descr, type, subtype, QFileInfo (path).size () });
 		}

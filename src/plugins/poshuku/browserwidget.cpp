@@ -135,11 +135,11 @@ namespace Poshuku
 
 		WebView_->SetBrowserWidget (this);
 		connect (WebView_,
-				SIGNAL (invalidateSettings ()),
+				SIGNAL (urlChanged (QUrl)),
 				this,
 				SIGNAL (tabRecoverDataChanged ()));
 		connect (WebView_,
-				SIGNAL (urlChanged (QUrl)),
+				SIGNAL (zoomChanged ()),
 				this,
 				SIGNAL (tabRecoverDataChanged ()));
 
@@ -588,7 +588,7 @@ namespace Poshuku
 		QByteArray ba;
 		QDataStream out (&ba, QIODevice::WriteOnly);
 		out << *WebView_->page ()->history ();
-		BrowserWidgetSettings result =
+		return
 		{
 			WebView_->zoomFactor (),
 			NotifyWhenFinished_->isChecked (),
@@ -596,21 +596,16 @@ namespace Poshuku
 				QTime (0, 0, 0).addMSecs (ReloadTimer_->interval ()) :
 				QTime (0, 0, 0),
 			ba,
-			WebView_->page ()->mainFrame ()->scrollPosition ()
+			WebView_->page ()->mainFrame ()->scrollPosition (),
+			WebView_->settings ()->defaultTextEncoding ()
 		};
-		return result;
 	}
 
 	void BrowserWidget::SetWidgetSettings (const BrowserWidgetSettings& settings)
 	{
-		if (std::fabs (settings.ZoomFactor_ - 1) <
+		if (std::fabs (settings.ZoomFactor_ - 1) >
 				std::numeric_limits<decltype (settings.ZoomFactor_)>::epsilon ())
-		{
-			qDebug () << Q_FUNC_INFO
-				<< "setting zoomfactor to"
-				<< settings.ZoomFactor_;
 			WebView_->setZoomFactor (settings.ZoomFactor_);
-		}
 
 		NotifyWhenFinished_->setChecked (settings.NotifyWhenFinished_);
 		QTime interval = settings.ReloadInterval_;
@@ -630,6 +625,8 @@ namespace Poshuku
 
 		if (!settings.ScrollPosition_.isNull ())
 			SetOnLoadScrollPoint (settings.ScrollPosition_);
+
+		WebView_->settings ()->setDefaultTextEncoding (settings.DefaultEncoding_);
 	}
 
 	void BrowserWidget::SetURL (const QUrl& thurl)
@@ -860,9 +857,6 @@ namespace Poshuku
 		QDataStream str (data);
 		str >> url
 			>> settings;
-
-		qDebug () << Q_FUNC_INFO << url;
-		qDebug () << data;
 
 		SetURL (url);
 		SetWidgetSettings (settings);

@@ -30,6 +30,7 @@
 #include "graffiti.h"
 #include <QIcon>
 #include <util/util.h>
+#include <interfaces/lmp/mediainfo.h>
 #include "graffititab.h"
 #include "progressmanager.h"
 
@@ -102,25 +103,7 @@ namespace Graffiti
 	void Plugin::TabOpenRequested (const QByteArray& tabClass)
 	{
 		if (TaggerTC_.TabClass_ == tabClass)
-		{
-			auto tab = new GraffitiTab (CoreProxy_, LMPProxy_, TaggerTC_, this);
-			emit addNewTab (TaggerTC_.VisibleName_, tab);
-			emit raiseTab (tab);
-
-			connect (tab,
-					SIGNAL (removeTab (QWidget*)),
-					this,
-					SIGNAL (removeTab (QWidget*)));
-
-			connect (tab,
-					SIGNAL (tagsFetchProgress (int, int, QObject*)),
-					ProgressMgr_,
-					SLOT (handleTagsFetch (int, int, QObject*)));
-			connect (tab,
-					SIGNAL (cueSplitStarted (CueSplitter*)),
-					ProgressMgr_,
-					SLOT (handleCueSplitter (CueSplitter*)));
-		}
+			MakeTab ();
 		else
 			qWarning () << Q_FUNC_INFO
 					<< "unknown tab class"
@@ -135,6 +118,63 @@ namespace Graffiti
 	void Plugin::SetLMPProxy (ILMPProxy_ptr proxy)
 	{
 		LMPProxy_ = proxy;
+	}
+
+	GraffitiTab* Plugin::MakeTab ()
+	{
+		auto tab = new GraffitiTab (CoreProxy_, LMPProxy_, TaggerTC_, this);
+		emit addNewTab (TaggerTC_.VisibleName_, tab);
+		emit raiseTab (tab);
+
+		connect (tab,
+				SIGNAL (removeTab (QWidget*)),
+				this,
+				SIGNAL (removeTab (QWidget*)));
+
+		connect (tab,
+				SIGNAL (tagsFetchProgress (int, int, QObject*)),
+				ProgressMgr_,
+				SLOT (handleTagsFetch (int, int, QObject*)));
+		connect (tab,
+				SIGNAL (cueSplitStarted (CueSplitter*)),
+				ProgressMgr_,
+				SLOT (handleCueSplitter (CueSplitter*)));
+		return tab;
+	}
+
+	void Plugin::hookPlaylistContextMenuRequested (LeechCraft::IHookProxy_ptr,
+			QMenu *menu, const MediaInfo& mediaInfo)
+	{
+		if (mediaInfo.LocalPath_.isEmpty ())
+			return;
+
+		const QFileInfo info { mediaInfo.LocalPath_ };
+		if (!info.exists ())
+			return;
+
+		menu->addSeparator ();
+
+		const auto action = menu->addAction (tr ("Edit tags..."),
+				this,
+				SLOT (handleOpenTabFromContextMenu ()));
+		action->setProperty ("ActionIcon", "mail-tagged");
+		action->setProperty ("LMP/Graffiti/Filepath", mediaInfo.LocalPath_);
+	}
+
+	void Plugin::hookCollectionContextMenuRequested (IHookProxy_ptr proxy,
+			QMenu *menu, const MediaInfo& info)
+	{
+		hookPlaylistContextMenuRequested (proxy, menu, info);
+	}
+
+	void Plugin::handleOpenTabFromContextMenu ()
+	{
+		const auto& path = sender ()->property ("LMP/Graffiti/Filepath").toString ();
+
+		const auto tab = MakeTab ();
+
+		const QFileInfo info { path };
+		tab->SetPath (info.dir ().path (), info.fileName ());
 	}
 }
 }

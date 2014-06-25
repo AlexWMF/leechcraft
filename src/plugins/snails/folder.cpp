@@ -27,52 +27,40 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#pragma once
-
-#include <memory>
-#include <QAbstractItemModel>
-#include <QStringList>
-#include "common.h"
+#include "folder.h"
 
 namespace LeechCraft
 {
 namespace Snails
 {
-	class Account;
-	struct Folder;
-
-	struct FolderDescr;
-	typedef std::shared_ptr<FolderDescr> FolderDescr_ptr;
-
-	class FoldersModel : public QAbstractItemModel
+	bool operator== (const Folder& f1, const Folder& f2)
 	{
-		const QStringList Headers_;
-
-		FolderDescr_ptr RootFolder_;
-		QHash<QStringList, FolderDescr*> Folder2Descr_;
-	public:
-		enum Role
-		{
-			FolderPath = Qt::UserRole + 1
-		};
-
-		enum Column
-		{
-			FolderName,
-			MessageCount
-		};
-
-		FoldersModel (Account*);
-
-		QVariant headerData (int, Qt::Orientation, int) const;
-		int columnCount (const QModelIndex& = {}) const;
-		QVariant data (const QModelIndex&, int) const;
-		QModelIndex index (int, int, const QModelIndex& = {}) const;
-		QModelIndex parent (const QModelIndex&) const;
-		int rowCount (const QModelIndex& = {}) const;
-
-		void SetFolders (const QList<Folder>& folders);
-		void SetFolderMessageCount (const QStringList&, int);
-	};
+		return f1.Type_ == f2.Type_ && f1.Path_ == f2.Path_;
+	}
 }
 }
+
+QDataStream& operator<< (QDataStream& out, const LeechCraft::Snails::Folder& folder)
+{
+	out << static_cast<quint8> (1)
+			<< static_cast<quint32> (folder.Type_)
+			<< folder.Path_;
+	return out;
+}
+
+QDataStream& operator>> (QDataStream& in, LeechCraft::Snails::Folder& folder)
+{
+	quint8 version = 0;
+	in >> version;
+	if (version != 1)
+		return in;
+
+	quint32 type = 0;
+	in >> type
+			>> folder.Path_;
+
+	folder.Type_ = static_cast<LeechCraft::Snails::FolderType> (type);
+
+	return in;
+}
+

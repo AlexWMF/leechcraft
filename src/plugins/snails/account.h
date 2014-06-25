@@ -50,6 +50,7 @@ namespace Snails
 	class AccountFolderManager;
 	class MailModel;
 	class FoldersModel;
+	struct Folder;
 
 	class Account : public QObject
 	{
@@ -154,6 +155,8 @@ namespace Snails
 
 		void SetReadStatus (bool, const QList<QByteArray>&, const QStringList&);
 
+		void DeleteMessages (const QList<QByteArray>& ids, const QStringList& folder);
+
 		void Update (const Message_ptr&);
 
 		QByteArray Serialize () const;
@@ -185,7 +188,7 @@ namespace Snails
 		void handleFolderSyncFinished (const QStringList&, const QByteArray&);
 		void handleMessageCountFetched (int, const QStringList&);
 
-		void handleGotFolders (QList<QStringList>);
+		void handleGotFolders (const QList<LeechCraft::Snails::Folder>&);
 		void handleFoldersUpdated ();
 
 		void handleMessageBodyFetched (Message_ptr);

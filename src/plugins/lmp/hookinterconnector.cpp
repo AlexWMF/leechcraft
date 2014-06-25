@@ -27,52 +27,15 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#pragma once
-
-#include <memory>
-#include <QAbstractItemModel>
-#include <QStringList>
-#include "common.h"
+#include "hookinterconnector.h"
 
 namespace LeechCraft
 {
-namespace Snails
+namespace LMP
 {
-	class Account;
-	struct Folder;
-
-	struct FolderDescr;
-	typedef std::shared_ptr<FolderDescr> FolderDescr_ptr;
-
-	class FoldersModel : public QAbstractItemModel
+	HookInterconnector::HookInterconnector (QObject *parent)
+	: BaseHookInterconnector { parent }
 	{
-		const QStringList Headers_;
-
-		FolderDescr_ptr RootFolder_;
-		QHash<QStringList, FolderDescr*> Folder2Descr_;
-	public:
-		enum Role
-		{
-			FolderPath = Qt::UserRole + 1
-		};
-
-		enum Column
-		{
-			FolderName,
-			MessageCount
-		};
-
-		FoldersModel (Account*);
-
-		QVariant headerData (int, Qt::Orientation, int) const;
-		int columnCount (const QModelIndex& = {}) const;
-		QVariant data (const QModelIndex&, int) const;
-		QModelIndex index (int, int, const QModelIndex& = {}) const;
-		QModelIndex parent (const QModelIndex&) const;
-		int rowCount (const QModelIndex& = {}) const;
-
-		void SetFolders (const QList<Folder>& folders);
-		void SetFolderMessageCount (const QStringList&, int);
-	};
+	}
 }
 }
