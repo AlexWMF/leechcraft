@@ -304,6 +304,22 @@ namespace Snails
 
 		try
 		{
+			if (const auto& refHeader = header->References ())
+			{
+				const auto& seqVal = refHeader->getValue ();
+				const auto& seq = vmime::dynamicCast<const vmime::messageIdSequence> (seqVal);
+
+				for (const auto& id : seq->getMessageIdList ())
+					msg->AddReferences (id->getId ().c_str ());
+			}
+		}
+		catch (const std::exception& e)
+		{
+			qWarning () << e.what ();
+		}
+
+		try
+		{
 			if (const auto& irt = header->InReplyTo ())
 			{
 				const auto& seqVal = irt->getValue ();
@@ -367,12 +383,17 @@ namespace Snails
 
 		try
 		{
-			const auto& origDateVal = header->Date ()->getValue ();
-			const auto& origDate = vmime::dynamicCast<const vmime::datetime> (origDateVal);
-			const auto& date = vmime::utility::datetimeUtils::toUniversalTime (*origDate);
-			QDate qdate (date.getYear (), date.getMonth (), date.getDay ());
-			QTime time (date.getHour (), date.getMinute (), date.getSecond ());
-			msg->SetDate (QDateTime (qdate, time, Qt::UTC));
+			if (const auto dateHeader = header->Date ())
+			{
+				const auto& origDateVal = dateHeader->getValue ();
+				const auto& origDate = vmime::dynamicCast<const vmime::datetime> (origDateVal);
+				const auto& date = vmime::utility::datetimeUtils::toUniversalTime (*origDate);
+				QDate qdate (date.getYear (), date.getMonth (), date.getDay ());
+				QTime time (date.getHour (), date.getMinute (), date.getSecond ());
+				msg->SetDate (QDateTime (qdate, time, Qt::UTC));
+			}
+			else
+				qWarning () << "no 'date' data";
 		}
 		catch (const vmime::exceptions::no_such_field&)
 		{
@@ -380,9 +401,14 @@ namespace Snails
 
 		try
 		{
-			const auto& strVal = header->Subject ()->getValue ();
-			const auto& str = vmime::dynamicCast<const vmime::text> (strVal);
-			msg->SetSubject (QString::fromUtf8 (str->getConvertedText (utf8cs).c_str ()));
+			if (const auto subjectHeader = header->Subject ())
+			{
+				const auto& strVal = subjectHeader->getValue ();
+				const auto& str = vmime::dynamicCast<const vmime::text> (strVal);
+				msg->SetSubject (QString::fromUtf8 (str->getConvertedText (utf8cs).c_str ()));
+			}
+			else
+				qWarning () << "no 'subject' data";
 		}
 		catch (const vmime::exceptions::no_such_field&)
 		{
@@ -948,6 +974,21 @@ namespace Snails
 
 			break;
 		}
+	}
+
+	void AccountThreadWorker::copyMessages (const QList<QByteArray>& ids,
+			const QStringList& from, const QList<QStringList>& tos)
+	{
+		if (ids.isEmpty () || tos.isEmpty ())
+			return;
+
+		const auto& folder = GetFolder (from, vmime::net::folder::MODE_READ_WRITE);
+		if (!folder)
+			return;
+
+		const auto& set = ToMessageSet (ids);
+		for (const auto& to : tos)
+			folder->copyMessages (Folder2Path (to), set);
 	}
 
 	void AccountThreadWorker::deleteMessages (const QList<QByteArray>& ids, const QStringList& path)

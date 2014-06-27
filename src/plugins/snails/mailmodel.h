@@ -50,7 +50,8 @@ namespace Snails
 		const TreeNode_ptr Root_;
 
 		QList<Message_ptr> Messages_;
-		QHash<QByteArray, TreeNode_ptr> FolderId2Node_;
+		QHash<QByteArray, QList<TreeNode_ptr>> FolderId2Nodes_;
+		QHash<QByteArray, QByteArray> MsgId2FolderId_;
 
 		enum class Column
 		{
@@ -80,11 +81,17 @@ namespace Snails
 		QStringList GetCurrentFolder () const;
 
 		void Clear ();
+
 		void Append (QList<Message_ptr>);
+
 		bool Update (const Message_ptr&);
 		bool Remove (const QByteArray&);
 	private:
-		QModelIndex GetIndex (const QByteArray& folderId, int column) const;
+		void RemoveNode (const TreeNode_ptr&);
+		bool AppendStructured (const Message_ptr&);
+
+		QList<QModelIndex> GetIndexes (const QByteArray& folderId, int column) const;
+		QList<QList<QModelIndex>> GetIndexes (const QByteArray& folderId, const QList<int>& columns) const;
 		Message_ptr GetMessageByFolderId (const QByteArray&) const;
 	};
 }

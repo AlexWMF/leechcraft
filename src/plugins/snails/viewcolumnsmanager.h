@@ -29,70 +29,36 @@
 
 #pragma once
 
-#include <QWidget>
-#include <interfaces/ihavetabs.h>
-#include "ui_mailtab.h"
-#include "account.h"
+#include <QObject>
 
-class QStandardItemModel;
-class QStandardItem;
-class QSortFilterProxyModel;
+class QHeaderView;
 
 namespace LeechCraft
 {
 namespace Snails
 {
-	class MailTab : public QWidget
-				  , public ITabWidget
+	class ViewColumnsManager : public QObject
 	{
 		Q_OBJECT
-		Q_INTERFACES (ITabWidget)
 
-		Ui::MailTab Ui_;
+		QHeaderView * const View_;
 
-		QToolBar * const TabToolbar_;
-		QToolBar * const MsgToolbar_;
+		int StretchColumn_ = -1;
+		QList<int> ColumnWidths_;
 
-		QAction *MsgReply_;
-		QAction *MsgMarkUnread_;
-		QMenu *MsgCopy_;
-		QAction *MsgRemove_;
-		QMenu *MsgAttachments_;
-
-		TabClassInfo TabClass_;
-		QObject *PMT_;
-
-		QSortFilterProxyModel *MailSortFilterModel_;
-		Account_ptr CurrAcc_;
-		Message_ptr CurrMsg_;
+		bool IgnoreResizes_ = false;
 	public:
-		MailTab (const TabClassInfo&, QObject*, QWidget* = 0);
+		ViewColumnsManager (QHeaderView*);
 
-		TabClassInfo GetTabClassInfo () const;
-		QObject* ParentMultiTabs ();
-		void Remove ();
-		QToolBar* GetToolBar () const;
-	private:
-		void FillTabToolbarActions ();
-		QList<QByteArray> GetSelectedIds () const;
+		void SetStretchColumn (int);
+		void SetDefaultWidths (const QList<int>&);
+		void SetDefaultWidths (const QStringList&);
+
+		bool eventFilter (QObject*, QEvent*);
 	private slots:
-		void handleCurrentAccountChanged (const QModelIndex&);
-		void handleCurrentTagChanged (const QModelIndex&);
-		void handleMailSelected (const QModelIndex&);
-
-		void handleFoldersUpdated ();
-
-		void handleReply ();
-		void handleCopyMessages (QAction*);
-		void handleMarkMsgUnread ();
-		void handleRemoveMsgs ();
-
-		void handleAttachment ();
-		void handleFetchNewMail ();
-
-		void handleMessageBodyFetched (Message_ptr);
-	signals:
-		void removeTab (QWidget*);
+		void readjustWidths ();
+		void handleSectionResized (int, int, int);
+		void handleSectionCountChanged (int, int);
 	};
 }
 }

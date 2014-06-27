@@ -34,7 +34,7 @@ namespace LeechCraft
 {
 namespace Snails
 {
-	struct MailModel::TreeNode
+	struct MailModel::TreeNode : std::enable_shared_from_this<TreeNode>
 	{
 		QByteArray FolderID_;
 
@@ -124,7 +124,10 @@ namespace Snails
 		switch (static_cast<Column> (index.column ()))
 		{
 		case Column::From:
-			return GetNiceMail (msg->GetAddress (Message::Address::From));
+		{
+			const auto& addr = msg->GetAddress (Message::Address::From);
+			return addr.first.isEmpty () ? addr.second : addr.first;
+		}
 		case Column::Subject:
 			return msg->GetSubject ();
 		case Column::Date:
@@ -193,7 +196,8 @@ namespace Snails
 		beginRemoveRows ({}, 0, Messages_.size () - 1);
 		Messages_.clear ();
 		Root_->Children_.clear ();
-		FolderId2Node_.clear ();
+		FolderId2Nodes_.clear ();
+		MsgId2FolderId_.clear ();
 		endRemoveRows ();
 	}
 
@@ -224,31 +228,43 @@ namespace Snails
 		if (messages.isEmpty ())
 			return;
 
-		const auto rc = Messages_.size ();
+		std::sort (messages.begin (), messages.end (),
+				[] (const Message_ptr& left, const Message_ptr& right)
+					{ return left->GetDate () < right->GetDate (); });
+
 		Messages_ += messages;
 
-		emit beginInsertColumns ({}, rc, rc + messages.size () - 1);
 		for (const auto& msg : messages)
 		{
-			const auto& item = std::make_shared<TreeNode> (msg, Root_);
-			Root_->Children_.append (item);
-			FolderId2Node_ [msg->GetFolderID ()] = item;
+			const auto& msgId = msg->GetMessageID ();
+			if (!msgId.isEmpty ())
+				MsgId2FolderId_ [msgId] = msg->GetFolderID ();
 		}
-		emit endInsertRows ();
+
+		for (const auto& msg : messages)
+			if (!AppendStructured (msg))
+			{
+				const auto& node = std::make_shared<TreeNode> (msg, Root_);
+				beginInsertRows ({}, Root_->Children_.size (), Root_->Children_.size ());
+				Root_->Children_.append (node);
+				FolderId2Nodes_ [msg->GetFolderID ()] << node;
+				endInsertRows ();
+			}
 	}
 
 	bool MailModel::Update (const Message_ptr& msg)
 	{
 		const auto pos = std::find_if (Messages_.begin (), Messages_.end (),
-				[&msg] (const Message_ptr& other) { return other->GetFolderID () == msg->GetFolderID (); });
+				[&msg] (const Message_ptr& other)
+					{ return other->GetFolderID () == msg->GetFolderID (); });
 		if (pos == Messages_.end ())
 			return false;
 
 		if (*pos != msg)
 		{
 			*pos = msg;
-			emit dataChanged (GetIndex (msg->GetFolderID (), 0),
-					GetIndex (msg->GetFolderID (), columnCount () - 1));
+			for (const auto& indexPair : GetIndexes (msg->GetFolderID (), { 0, columnCount () - 1 }))
+				emit dataChanged (indexPair.value (0), indexPair.value (1));
 		}
 
 		return true;
@@ -261,27 +277,106 @@ namespace Snails
 		if (msgPos == Messages_.end ())
 			return false;
 
-		const auto& node = FolderId2Node_.value (id);
-		const auto& parent = node->Parent_.lock ();
+		for (const auto& node : FolderId2Nodes_.value (id))
+			RemoveNode (node);
 
-		const auto row = node->Row ();
-		const auto& parentIndex = GetIndex (parent->FolderID_, 0);
-		beginRemoveRows (parentIndex, row, row);
+		FolderId2Nodes_.remove (id);
+		MsgId2FolderId_.remove ((*msgPos)->GetMessageID ());
 		Messages_.erase (msgPos);
-		parent->Children_.removeOne (node);
-		FolderId2Node_.remove (id);
-		endRemoveRows ();
 
 		return true;
 	}
 
-	QModelIndex MailModel::GetIndex (const QByteArray& folderId, int column) const
+	void MailModel::RemoveNode (const TreeNode_ptr& node)
 	{
-		const auto& node = FolderId2Node_.value (folderId);
-		if (!node)
-			return {};
+		const auto& parent = node->Parent_.lock ();
 
-		return createIndex (node->Row (), column, node.get ());
+		const auto& parentIndex = parent == Root_ ?
+				QModelIndex {} :
+				createIndex (parent->Row (), 0, parent.get ());
+
+		const auto row = node->Row ();
+
+		if (const auto childCount = node->Children_.size ())
+		{
+			const auto& nodeIndex = createIndex (row, 0, node.get ());
+
+			beginRemoveRows (nodeIndex, 0, childCount - 1);
+			auto childNodes = std::move (node->Children_);
+			node->Children_.clear ();
+			endRemoveRows ();
+
+			for (const auto& childNode : childNodes)
+				childNode->Parent_ = parent;
+
+			beginInsertRows (parentIndex,
+					parent->Children_.size (),
+					parent->Children_.size () + childCount - 1);
+			parent->Children_ += childNodes;
+			endInsertRows ();
+		}
+
+		beginRemoveRows (parentIndex, row, row);
+		parent->Children_.removeOne (node);
+		endRemoveRows ();
+	}
+
+	bool MailModel::AppendStructured (const Message_ptr& msg)
+	{
+		auto refs = msg->GetReferences ();
+		for (const auto& replyTo : msg->GetInReplyTo ())
+			if (!refs.contains (replyTo))
+				refs << replyTo;
+
+		if (refs.isEmpty ())
+			return false;
+
+		const auto& replyTo = refs.last ();
+		const auto& folderId = MsgId2FolderId_.value (replyTo);
+		if (folderId.isEmpty ())
+		{
+			qDebug () << Q_FUNC_INFO
+					<< folderId
+					<< replyTo
+					<< "not found";
+			return false;
+		}
+
+		const auto& indexes = GetIndexes (folderId, 0);
+		for (const auto& parentIndex : indexes)
+		{
+			const auto parentNode = static_cast<TreeNode*> (parentIndex.internalPointer ());
+			const auto row = parentNode->Children_.size ();
+
+			const auto& node = std::make_shared<TreeNode> (msg, parentNode->shared_from_this ());
+			beginInsertRows (parentIndex, row, row);
+			parentNode->Children_ << node;
+			FolderId2Nodes_ [msg->GetFolderID ()] << node;
+			endInsertRows ();
+		}
+
+		return !indexes.isEmpty ();
+	}
+
+	QList<QModelIndex> MailModel::GetIndexes (const QByteArray& folderId, int column) const
+	{
+		QList<QModelIndex> result;
+		for (const auto& node : FolderId2Nodes_.value (folderId))
+			result << createIndex (node->Row (), column, node.get ());
+		return result;
+	}
+
+	QList<QList<QModelIndex>> MailModel::GetIndexes (const QByteArray& folderId, const QList<int>& columns) const
+	{
+		QList<QList<QModelIndex>> result;
+		for (const auto& node : FolderId2Nodes_.value (folderId))
+		{
+			QList<QModelIndex> subresult;
+			for (const auto column : columns)
+				subresult << createIndex (node->Row (), column, node.get ());
+			result << subresult;
+		}
+		return result;
 	}
 
 	Message_ptr MailModel::GetMessageByFolderId (const QByteArray& id) const

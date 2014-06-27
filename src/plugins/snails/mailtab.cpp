@@ -40,6 +40,9 @@
 #include "storage.h"
 #include "mailtreedelegate.h"
 #include "mailmodel.h"
+#include "viewcolumnsmanager.h"
+#include "accountfoldermanager.h"
+#include "vmimeconversions.h"
 
 namespace LeechCraft
 {
@@ -55,6 +58,15 @@ namespace Snails
 	{
 		Ui_.setupUi (this);
 		//Ui_.MailTreeLay_->insertWidget (0, MsgToolbar_);
+
+		auto colMgr = new ViewColumnsManager (Ui_.MailTree_->header ());
+		colMgr->SetStretchColumn (1);
+		colMgr->SetDefaultWidths ({
+				"Typical sender name and surname",
+				{},
+				QDateTime::currentDateTime ().toString (),
+				Util::MakePrettySize (999 * 1024) + "  "
+			});
 
 		Ui_.AccountsTree_->setModel (Core::Instance ().GetAccountsModel ());
 
@@ -116,10 +128,22 @@ namespace Snails
 				SIGNAL (triggered ()),
 				this,
 				SLOT (handleReply ()));
+		TabToolbar_->addAction (MsgReply_);
 
 		MsgAttachments_ = new QMenu (tr ("Attachments"));
 		MsgAttachments_->setIcon (Core::Instance ().GetProxy ()->
 					GetIconThemeManager ()->GetIcon ("mail-attachment"));
+		TabToolbar_->addAction (MsgAttachments_->menuAction ());
+
+		TabToolbar_->addSeparator ();
+
+		MsgCopy_ = new QMenu (tr ("Copy messages"));
+		MsgCopy_->menuAction ()->setProperty ("ActionIcon", "edit-copy");
+		connect (MsgCopy_,
+				SIGNAL (triggered (QAction*)),
+				this,
+				SLOT (handleCopyMessages (QAction*)));
+		TabToolbar_->addAction (MsgCopy_->menuAction ());
 
 		MsgMarkUnread_ = new QAction (tr ("Mark as unread"), this);
 		MsgMarkUnread_->setProperty ("ActionIcon", "mail-mark-unread");
@@ -127,6 +151,7 @@ namespace Snails
 				SIGNAL (triggered ()),
 				this,
 				SLOT (handleMarkMsgUnread ()));
+		TabToolbar_->addAction (MsgMarkUnread_);
 
 		MsgRemove_ = new QAction (tr ("Delete messages"), this);
 		MsgRemove_->setProperty ("ActionIcon", "list-remove");
@@ -134,10 +159,6 @@ namespace Snails
 				SIGNAL (triggered ()),
 				this,
 				SLOT (handleRemoveMsgs ()));
-
-		TabToolbar_->addAction (MsgReply_);
-		TabToolbar_->addAction (MsgAttachments_->menuAction ());
-		TabToolbar_->addAction (MsgMarkUnread_);
 		TabToolbar_->addAction (MsgRemove_);
 	}
 
@@ -160,12 +181,20 @@ namespace Snails
 	void MailTab::handleCurrentAccountChanged (const QModelIndex& idx)
 	{
 		if (CurrAcc_)
+		{
 			disconnect (CurrAcc_.get (),
 					0,
 					this,
 					0);
+			disconnect (CurrAcc_->GetFolderManager (),
+					0,
+					this,
+					0);
+		}
 
 		CurrAcc_ = Core::Instance ().GetAccount (idx);
+		handleFoldersUpdated ();
+
 		if (!CurrAcc_)
 			return;
 
@@ -185,6 +214,12 @@ namespace Snails
 				SIGNAL (currentRowChanged (QModelIndex, QModelIndex)),
 				this,
 				SLOT (handleCurrentTagChanged (QModelIndex)));
+
+		const auto fm = CurrAcc_->GetFolderManager ();
+		connect (fm,
+				SIGNAL (foldersUpdated ()),
+				this,
+				SLOT (handleFoldersUpdated ()));
 	}
 
 	namespace
@@ -314,12 +349,39 @@ namespace Snails
 		CurrMsg_ = msg;
 	}
 
+	void MailTab::handleFoldersUpdated ()
+	{
+		MsgCopy_->clear ();
+
+		if (!CurrAcc_)
+			return;
+
+		auto folders = CurrAcc_->GetFolderManager ()->GetFolders ();
+		for (const auto& folder : folders)
+		{
+			const auto& icon = GetFolderIcon (folder.Type_);
+			const auto act = MsgCopy_->addAction (icon, folder.Path_.join ("/"));
+			act->setProperty ("Snails/FolderPath", folder.Path_);
+		}
+	}
+
 	void MailTab::handleReply ()
+	{
+		if (!CurrAcc_ || !CurrMsg_)
+			return;
+
+		Core::Instance ().PrepareReplyTab (CurrMsg_, CurrAcc_);
+	}
+
+	void MailTab::handleCopyMessages (QAction *action)
 	{
 		if (!CurrAcc_)
 			return;
 
-		Core::Instance ().PrepareReplyTab (CurrMsg_, CurrAcc_);
+		const auto& folderPath = action->property ("Snails/FolderPath").toStringList ();
+
+		const auto& ids = GetSelectedIds ();
+		CurrAcc_->CopyMessages (ids, CurrAcc_->GetMailModel ()->GetCurrentFolder (), { folderPath });
 	}
 
 	void MailTab::handleMarkMsgUnread ()
