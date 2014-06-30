@@ -242,7 +242,7 @@ namespace Snails
 		}
 	}
 
-	VmimeFolder_ptr AccountThreadWorker::GetFolder (const QStringList& path, int mode)
+	VmimeFolder_ptr AccountThreadWorker::GetFolder (const QStringList& path, FolderMode mode)
 	{
 		if (path.size () == 1 && path.at (0) == "[Gmail]")
 			return {};
@@ -254,10 +254,17 @@ namespace Snails
 		}
 
 		auto folder = CachedFolders_ [path];
-		if (folder->isOpen () && folder->getMode () != mode)
+
+		if (mode == FolderMode::NoChange)
+			return folder;
+
+		const auto requestedMode = mode == FolderMode::ReadOnly ?
+				vmime::net::folder::MODE_READ_ONLY :
+				vmime::net::folder::MODE_READ_WRITE;
+		if (folder->isOpen () && folder->getMode () != requestedMode)
 			folder->close (false);
 		if (!folder->isOpen ())
-			folder->open (mode);
+			folder->open (requestedMode);
 		return folder;
 	}
 
@@ -287,6 +294,19 @@ namespace Snails
 		catch (const vmime::exceptions::no_such_field&)
 		{
 			qWarning () << "no 'from' data";
+		}
+
+		try
+		{
+			if (const auto& replyToHeader = header->ReplyTo ())
+			{
+				const auto& replyToVal = replyToHeader->getValue ();
+				const auto& replyTo = vmime::dynamicCast<const vmime::mailbox> (replyToVal);
+				msg->AddAddress (Message::Address::ReplyTo, Mailbox2Strings (replyTo));
+			}
+		}
+		catch (const vmime::exceptions::no_such_field&)
+		{
 		}
 
 		try
@@ -487,7 +507,7 @@ namespace Snails
 	{
 		for (const auto& folder : origFolders)
 		{
-			if (const auto& netFolder = GetFolder (folder, vmime::net::folder::MODE_READ_WRITE))
+			if (const auto& netFolder = GetFolder (folder, FolderMode::ReadWrite))
 				FetchMessagesInFolder (folder, netFolder, last);
 		}
 	}
@@ -658,16 +678,18 @@ namespace Snails
 
 	namespace
 	{
-		void FullifyHeaderMessage (Message_ptr msg, const vmime::shared_ptr<vmime::message>& full)
+		void FullifyHeaderMessage (const Message_ptr& msg, const vmime::shared_ptr<vmime::message>& full)
 		{
-			vmime::messageParser mp (full);
+			vmime::messageParser mp { full };
 
 			QString html;
-			QString plain;
+			QStringList plainParts;
+			QStringList htmlPlainParts;
 
-			Q_FOREACH (auto tp, mp.getTextPartList ())
+			for (const auto& tp : mp.getTextPartList ())
 			{
-				if (tp->getType ().getType () != vmime::mediaTypes::TEXT)
+				const auto& type = tp->getType ();
+				if (type.getType () != vmime::mediaTypes::TEXT)
 				{
 					qWarning () << Q_FUNC_INFO
 							<< "non-text in text part"
@@ -675,21 +697,28 @@ namespace Snails
 					continue;
 				}
 
-				if (tp->getType ().getSubType () == vmime::mediaTypes::TEXT_HTML)
+				if (type.getSubType () == vmime::mediaTypes::TEXT_HTML)
 				{
 					auto htp = vmime::dynamicCast<const vmime::htmlTextPart> (tp);
 					html = Stringize (htp->getText (), htp->getCharset ());
-					plain = Stringize (htp->getPlainText (), htp->getCharset ());
+					htmlPlainParts << Stringize (htp->getPlainText (), htp->getCharset ());
 				}
-				else if (plain.isEmpty () &&
-						tp->getType ().getSubType () == vmime::mediaTypes::TEXT_PLAIN)
-					plain = Stringize (tp->getText (), tp->getCharset ());
+				else if (type.getSubType () == vmime::mediaTypes::TEXT_PLAIN)
+					plainParts << Stringize (tp->getText (), tp->getCharset ());
 			}
 
-			msg->SetBody (plain);
+			if (plainParts.isEmpty ())
+				plainParts = htmlPlainParts;
+
+			if (std::adjacent_find (plainParts.begin (), plainParts.end (),
+					[] (const QString& left, const QString& right)
+						{ return left.size () > right.size (); }) == plainParts.end ())
+				std::reverse (plainParts.begin (), plainParts.end ());
+
+			msg->SetBody (plainParts.join ("\n"));
 			msg->SetHTMLBody (html);
 
-			Q_FOREACH (auto att, mp.getAttachmentList ())
+			for (const auto& att : mp.getAttachmentList ())
 			{
 				const auto& type = att->getType ();
 				if (type.getType () == vmime::mediaTypes::TEXT &&
@@ -811,11 +840,11 @@ namespace Snails
 
 	void AccountThreadWorker::getMessageCount (const QStringList& folder, QObject *handler, const QByteArray& slot)
 	{
-		const auto& netFolder = GetFolder (folder, vmime::net::folder::MODE_READ_ONLY);
+		const auto& netFolder = GetFolder (folder, FolderMode::NoChange);
 		if (!netFolder)
 			return;
 
-		const auto count = netFolder->getMessageCount ();
+		const auto count = netFolder->getStatus ()->getMessageCount ();
 
 		QMetaObject::invokeMethod (handler,
 				slot,
@@ -828,7 +857,7 @@ namespace Snails
 		if (A_->InType_ == Account::InType::POP3)
 			return;
 
-		const auto& folder = GetFolder (folderPath, vmime::net::folder::MODE_READ_WRITE);
+		const auto& folder = GetFolder (folderPath, FolderMode::ReadWrite);
 		if (!folder)
 			return;
 
@@ -859,7 +888,7 @@ namespace Snails
 			return;
 
 		const QByteArray& sid = origMsg->GetFolderID ();
-		auto folder = GetFolder (origMsg->GetFolders ().value (0), vmime::net::folder::MODE_READ_WRITE);
+		auto folder = GetFolder (origMsg->GetFolders ().value (0), FolderMode::ReadWrite);
 		if (!folder)
 			return;
 
@@ -913,29 +942,12 @@ namespace Snails
 			return;
 
 		const auto& msgId = msg->GetFolderID ();
-		const vmime::string id { msgId.constData () };
-		qDebug () << Q_FUNC_INFO << msgId.toHex ();
 
-		auto store = MakeStore ();
-
-		auto folder = store->getFolder (Folder2Path (msg->GetFolders ().value (0)));
-		if (!folder)
-			return;
-
-		folder->open (vmime::net::folder::MODE_READ_WRITE);
-
-		auto messages = folder->getMessages (vmime::net::messageSet::byNumber (1, -1));
-		folder->fetchMessages (messages, vmime::net::fetchAttributes::UID);
-
-		auto pos = std::find_if (messages.begin (), messages.end (),
-				[&id] (const vmime::shared_ptr<vmime::net::message>& message)
-				{
-					return message->getUID () == id;
-				});
-		if (pos == messages.end ())
+		const auto& folder = GetFolder (msg->GetFolders ().value (0), FolderMode::ReadWrite);
+		const auto& msgSet = vmime::net::messageSet::byUID (msgId.constData ());
+		const auto& messages = folder->getAndFetchMessages (msgSet, vmime::net::fetchAttributes::STRUCTURE);
+		if (messages.empty ())
 		{
-			for (const auto& msg : messages)
-				qWarning () << QByteArray (static_cast<vmime::string> (msg->getUID ()).c_str ()).toHex ();
 			qWarning () << Q_FUNC_INFO
 					<< "message with ID"
 					<< msgId.toHex ()
@@ -944,7 +956,7 @@ namespace Snails
 			return;
 		}
 
-		vmime::messageParser mp ((*pos)->getParsedMessage ());
+		vmime::messageParser mp (messages.front ()->getParsedMessage ());
 		for (const auto& att : mp.getAttachmentList ())
 		{
 			if (StringizeCT (att->getName ()) != attName)
@@ -982,7 +994,7 @@ namespace Snails
 		if (ids.isEmpty () || tos.isEmpty ())
 			return;
 
-		const auto& folder = GetFolder (from, vmime::net::folder::MODE_READ_WRITE);
+		const auto& folder = GetFolder (from, FolderMode::ReadWrite);
 		if (!folder)
 			return;
 
@@ -996,7 +1008,7 @@ namespace Snails
 		if (ids.isEmpty ())
 			return;
 
-		const auto& folder = GetFolder (path, vmime::net::folder::MODE_READ_WRITE);
+		const auto& folder = GetFolder (path, FolderMode::ReadWrite);
 		if (!folder)
 			return;
 

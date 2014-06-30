@@ -27,26 +27,53 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#pragma once
-
-#include <QIdentityProxyModel>
-#include <QSet>
+#include "inverteffect.h"
+#include <QPainter>
+#include <qwebview.h>
 
 namespace LeechCraft
 {
-namespace LMP
+namespace Poshuku
 {
-	class UploadModel : public QIdentityProxyModel
+namespace DCAC
+{
+	InvertEffect::InvertEffect (QWebView *view)
+	: QGraphicsEffect { view }
 	{
-		QSet<QPersistentModelIndex> SourceIndexes_;
-	public:
-		UploadModel (QObject* = 0);
+	}
 
-		QSet<QPersistentModelIndex> GetSelectedIndexes () const;
+	void InvertEffect::draw (QPainter *painter)
+	{
+		QPoint offset;
+		auto image = sourcePixmap (Qt::DeviceCoordinates, &offset).toImage ();
+		switch (image.format ())
+		{
+		case QImage::Format_ARGB32:
+		case QImage::Format_ARGB32_Premultiplied:
+			break;
+		default:
+			image = image.convertToFormat (QImage::Format_ARGB32);
+			break;
+		}
+		image.detach ();
 
-		Qt::ItemFlags flags (const QModelIndex&) const;
-		QVariant data (const QModelIndex&, int) const;
-		bool setData (const QModelIndex&, const QVariant&, int);
-	};
+		painter->setWorldTransform ({});
+
+		const auto height = image.height ();
+		const auto width = image.width ();
+		for (int y = 0; y < height; ++y)
+		{
+			const auto scanline = reinterpret_cast<QRgb*> (image.scanLine (y));
+			for (int x = 0; x < width; ++x)
+			{
+				auto& color = scanline [x];
+				color &= 0x00ffffff;
+				color = uint32_t { 0xffffffff } - color;
+			}
+		}
+
+		painter->drawImage (offset, image);
+	}
+}
 }
 }

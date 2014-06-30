@@ -27,26 +27,56 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#pragma once
-
-#include <QIdentityProxyModel>
-#include <QSet>
+#include "viewsmanager.h"
+#include <QAction>
+#include <qwebview.h>
+#include "inverteffect.h"
+#include "xmlsettingsmanager.h"
 
 namespace LeechCraft
 {
-namespace LMP
+namespace Poshuku
 {
-	class UploadModel : public QIdentityProxyModel
+namespace DCAC
+{
+	void ViewsManager::AddView (QWebView *view)
 	{
-		QSet<QPersistentModelIndex> SourceIndexes_;
-	public:
-		UploadModel (QObject* = 0);
+		const auto effect = new InvertEffect { view };
+		view->setGraphicsEffect (effect);
 
-		QSet<QPersistentModelIndex> GetSelectedIndexes () const;
+		View2Effect_ [view] = effect;
 
-		Qt::ItemFlags flags (const QModelIndex&) const;
-		QVariant data (const QModelIndex&, int) const;
-		bool setData (const QModelIndex&, const QVariant&, int);
-	};
+		connect (view,
+				SIGNAL (destroyed (QObject*)),
+				this,
+				SLOT (handleViewDestroyed (QObject*)));
+
+		const auto enable = XmlSettingsManager::Instance ()
+				.property ("EnableNightModeByDefault").toBool ();
+		effect->setEnabled (enable);
+
+		const auto enableAct = new QAction { tr ("Night mode"), view };
+		view->addAction (enableAct);
+		enableAct->setShortcut (QString { "Ctrl+Shift+I" });
+		enableAct->setCheckable (true);
+		enableAct->setChecked (enable);
+		connect (enableAct,
+				SIGNAL (toggled (bool)),
+				effect,
+				SLOT (setEnabled (bool)));
+		View2EnableAction_ [view] = enableAct;
+	}
+
+	QAction* ViewsManager::GetEnableAction (QWebView *view) const
+	{
+		return View2EnableAction_.value (view);
+	}
+
+	void ViewsManager::handleViewDestroyed (QObject *view)
+	{
+		View2Effect_.remove (view);
+		View2EnableAction_.remove (view);
+	}
+}
 }
 }

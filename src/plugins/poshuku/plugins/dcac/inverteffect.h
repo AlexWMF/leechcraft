@@ -29,24 +29,23 @@
 
 #pragma once
 
-#include <QIdentityProxyModel>
-#include <QSet>
+#include <QGraphicsEffect>
+
+class QWebView;
 
 namespace LeechCraft
 {
-namespace LMP
+namespace Poshuku
 {
-	class UploadModel : public QIdentityProxyModel
+namespace DCAC
+{
+	class InvertEffect : public QGraphicsEffect
 	{
-		QSet<QPersistentModelIndex> SourceIndexes_;
 	public:
-		UploadModel (QObject* = 0);
-
-		QSet<QPersistentModelIndex> GetSelectedIndexes () const;
-
-		Qt::ItemFlags flags (const QModelIndex&) const;
-		QVariant data (const QModelIndex&, int) const;
-		bool setData (const QModelIndex&, const QVariant&, int);
+		InvertEffect (QWebView*);
+	protected:
+		void draw (QPainter*) override;
 	};
+}
 }
 }

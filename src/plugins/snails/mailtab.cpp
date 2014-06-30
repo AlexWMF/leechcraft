@@ -34,7 +34,9 @@
 #include <QSortFilterProxyModel>
 #include <QMenu>
 #include <QFileDialog>
+#include <QToolButton>
 #include <util/util.h>
+#include <util/tags/categoryselector.h>
 #include <interfaces/core/iiconthememanager.h>
 #include "core.h"
 #include "storage.h"
@@ -58,6 +60,8 @@ namespace Snails
 	{
 		Ui_.setupUi (this);
 		//Ui_.MailTreeLay_->insertWidget (0, MsgToolbar_);
+
+		Ui_.MailView_->settings ()->setAttribute (QWebSettings::DeveloperExtrasEnabled, true);
 
 		auto colMgr = new ViewColumnsManager (Ui_.MailTree_->header ());
 		colMgr->SetStretchColumn (1);
@@ -138,12 +142,28 @@ namespace Snails
 		TabToolbar_->addSeparator ();
 
 		MsgCopy_ = new QMenu (tr ("Copy messages"));
-		MsgCopy_->menuAction ()->setProperty ("ActionIcon", "edit-copy");
 		connect (MsgCopy_,
 				SIGNAL (triggered (QAction*)),
 				this,
 				SLOT (handleCopyMessages (QAction*)));
-		TabToolbar_->addAction (MsgCopy_->menuAction ());
+
+		MsgCopyButton_ = new QToolButton;
+		MsgCopyButton_->setMenu (MsgCopy_);
+		MsgCopyButton_->setProperty ("ActionIcon", "edit-copy");
+		MsgCopyButton_->setPopupMode (QToolButton::InstantPopup);
+		TabToolbar_->addWidget (MsgCopyButton_);
+
+		MsgMove_ = new QMenu (tr ("Move messages"));
+		connect (MsgMove_,
+				SIGNAL (triggered (QAction*)),
+				this,
+				SLOT (handleMoveMessages (QAction*)));
+
+		MsgMoveButton_ = new QToolButton;
+		MsgMoveButton_->setMenu (MsgMove_);
+		MsgMoveButton_->setProperty ("ActionIcon", "transform-move");
+		MsgMoveButton_->setPopupMode (QToolButton::InstantPopup);
+		TabToolbar_->addWidget (MsgMoveButton_);
 
 		MsgMarkUnread_ = new QAction (tr ("Mark as unread"), this);
 		MsgMarkUnread_->setProperty ("ActionIcon", "mail-mark-unread");
@@ -160,6 +180,8 @@ namespace Snails
 				this,
 				SLOT (handleRemoveMsgs ()));
 		TabToolbar_->addAction (MsgRemove_);
+
+		SetMsgActionsEnabled (false);
 	}
 
 	QList<QByteArray> MailTab::GetSelectedIds () const
@@ -176,6 +198,31 @@ namespace Snails
 			ids << currentId;
 
 		return ids;
+	}
+
+	void MailTab::SetMsgActionsEnabled (bool enable)
+	{
+		for (auto act : { MsgReply_, MsgMarkUnread_, MsgRemove_ })
+			act->setEnabled (enable);
+
+		MsgCopyButton_->setEnabled (enable);
+		MsgMoveButton_->setEnabled (enable);
+	}
+
+	QList<Folder> MailTab::GetActualFolders () const
+	{
+		if (!CurrAcc_)
+			return {};
+
+		auto folders = CurrAcc_->GetFolderManager ()->GetFolders ();
+		const auto& curFolder = CurrAcc_->GetMailModel ()->GetCurrentFolder ();
+
+		const auto curPos = std::find_if (folders.begin (), folders.end (),
+				[&curFolder] (const Folder& other) { return other.Path_ == curFolder; });
+		if (curPos != folders.end ())
+			folders.erase (curPos);
+
+		return folders;
 	}
 
 	void MailTab::handleCurrentAccountChanged (const QModelIndex& idx)
@@ -254,12 +301,84 @@ namespace Snails
 	{
 		CurrAcc_->ShowFolder (sidx);
 		handleMailSelected ({});
+		handleFoldersUpdated ();
+	}
+
+	namespace
+	{
+		QString GetStyle ()
+		{
+			const auto& palette = qApp->palette ();
+
+			auto result = Core::Instance ().GetMsgViewTemplate ();
+			result.replace ("$WindowText", palette.color (QPalette::ColorRole::WindowText).name ());
+			result.replace ("$Window", palette.color (QPalette::ColorRole::Window).name ());
+			result.replace ("$Base", palette.color (QPalette::ColorRole::Base).name ());
+			result.replace ("$Text", palette.color (QPalette::ColorRole::Text).name ());
+			result.replace ("$LinkVisited", palette.color (QPalette::ColorRole::LinkVisited).name ());
+			result.replace ("$Link", palette.color (QPalette::ColorRole::Link).name ());
+			return result;
+		}
+
+		QString ToHtml (const Message_ptr& msg)
+		{
+			QString html = "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">";
+			html += "<html xmlns='http://www.w3.org/1999/xhtml'><head><title>Message</title><style>";
+			html += GetStyle ();
+			html += "</style></head><body><div class='header'>";
+			auto addField = [&html] (const QString& cssClass, const QString& name, const QString& text)
+			{
+				if (!text.isEmpty ())
+					html += "<span class='field " + cssClass + "'><span class='fieldName'>" +
+							name + "</span>: " + text + "</span><br />";
+			};
+
+			addField ("subject", MailTab::tr ("Subject"), msg->GetSubject ());
+			addField ("from", MailTab::tr ("From"), HTMLize ({ msg->GetAddress (Message::Address::From) }));
+			addField ("replyTo", MailTab::tr ("Reply to"), HTMLize ({ msg->GetAddress (Message::Address::ReplyTo) }));
+			addField ("to", MailTab::tr ("To"), HTMLize (msg->GetAddresses (Message::Address::To)));
+			addField ("cc", MailTab::tr ("Copy"), HTMLize (msg->GetAddresses (Message::Address::Cc)));
+			addField ("bcc", MailTab::tr ("Blind copy"), HTMLize (msg->GetAddresses (Message::Address::Bcc)));
+			addField ("date", MailTab::tr ("Date"), msg->GetDate ().toString ());
+
+			const auto& htmlBody = msg->IsFullyFetched () ?
+					msg->GetHTMLBody () :
+					"<em>" + MailTab::tr ("Fetching the message...") + "</em>";
+
+			html += "</div><div class='body'>";
+
+			if (!htmlBody.isEmpty ())
+				html += htmlBody;
+			else
+			{
+				auto body = msg->GetBody ();
+				body.replace ("\r\n", "\n");
+
+				auto lines = body.split ('\n');
+				for (auto& line : lines)
+				{
+					auto escaped = Qt::escape (line);
+					if (line.startsWith ('>'))
+						line = "<span class='replyPart'>" + escaped + "</span>";
+					else
+						line = escaped;
+				}
+
+				html += "<pre>" + lines.join ("\n") + "</pre>";
+			}
+
+			html += "</div>";
+			html += "</body></html>";
+
+			return html;
+		}
 	}
 
 	void MailTab::handleMailSelected (const QModelIndex& sidx)
 	{
 		if (!CurrAcc_)
 		{
+			SetMsgActionsEnabled (false);
 			Ui_.MailView_->setHtml ({});
 			return;
 		}
@@ -268,6 +387,7 @@ namespace Snails
 
 		if (!sidx.isValid ())
 		{
+			SetMsgActionsEnabled (false);
 			Ui_.MailView_->setHtml ({});
 			return;
 		}
@@ -289,47 +409,20 @@ namespace Snails
 					<< id.toHex ()
 					<< e.what ();
 
+			SetMsgActionsEnabled (false);
 			const QString& html = tr ("<h2>Unable to load mail</h2><em>%1</em>").arg (e.what ());
 			Ui_.MailView_->setHtml (html);
 			return;
 		}
+
+		SetMsgActionsEnabled (true);
 
 		if (!msg->IsFullyFetched ())
 			CurrAcc_->FetchWholeMessage (msg);
 		else if (!msg->IsRead ())
 			CurrAcc_->SetReadStatus (true, { id }, folder);
 
-		QString html = R"delim(<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-			<html xmlns="http://www.w3.org/1999/xhtml">
-				<head>
-					<title>Message</title>
-					<style>)delim";
-		html += Core::Instance ().GetMsgViewTemplate ();
-		html += "</style></head><body>";
-		auto addField = [&html] (const QString& cssClass, const QString& name, const QString& text)
-		{
-			if (!text.isEmpty ())
-				html += "<span class='field " + cssClass + "'><span class='fieldName'>" +
-						name + "</span>: " + text + "</span><br />";
-		};
-
-		addField ("subject", tr ("Subject"), msg->GetSubject ());
-		addField ("from", tr ("From"), HTMLize ({ msg->GetAddress (Message::Address::From) }));
-		addField ("to", tr ("To"), HTMLize (msg->GetAddresses (Message::Address::To)));
-		addField ("cc", tr ("Copy"), HTMLize (msg->GetAddresses (Message::Address::Cc)));
-		addField ("bcc", tr ("Blind copy"), HTMLize (msg->GetAddresses (Message::Address::Bcc)));
-		addField ("date", tr ("Date"), msg->GetDate ().toString ());
-
-		const auto& htmlBody = msg->IsFullyFetched () ?
-				msg->GetHTMLBody () :
-				"<em>" + tr ("Fetching the message...") + "</em>";
-
-		html += "<div class='body'>";
-		html += htmlBody.isEmpty () ?
-				"<pre>" + Qt::escape (msg->GetBody ()) + "</pre>" :
-				htmlBody;
-		html += "</div>";
-		html += "</body></html>";
+		const auto& html = ToHtml (msg);
 
 		Ui_.MailView_->setHtml (html);
 
@@ -352,17 +445,28 @@ namespace Snails
 	void MailTab::handleFoldersUpdated ()
 	{
 		MsgCopy_->clear ();
+		MsgMove_->clear ();
 
 		if (!CurrAcc_)
 			return;
 
-		auto folders = CurrAcc_->GetFolderManager ()->GetFolders ();
-		for (const auto& folder : folders)
+		const auto& folders = GetActualFolders ();
+
+		auto setter = [this, &folders] (QMenu *menu, const char *multislot)
 		{
-			const auto& icon = GetFolderIcon (folder.Type_);
-			const auto act = MsgCopy_->addAction (icon, folder.Path_.join ("/"));
-			act->setProperty ("Snails/FolderPath", folder.Path_);
-		}
+			menu->addAction ("Multiple folders...", this, multislot);
+			menu->addSeparator ();
+
+			for (const auto& folder : GetActualFolders ())
+			{
+				const auto& icon = GetFolderIcon (folder.Type_);
+				const auto act = menu->addAction (icon, folder.Path_.join ("/"));
+				act->setProperty ("Snails/FolderPath", folder.Path_);
+			}
+		};
+
+		setter (MsgCopy_, SLOT (handleCopyMultipleFolders ()));
+		setter (MsgMove_, SLOT (handleMoveMultipleFolders ()));
 	}
 
 	void MailTab::handleReply ()
@@ -373,15 +477,99 @@ namespace Snails
 		Core::Instance ().PrepareReplyTab (CurrMsg_, CurrAcc_);
 	}
 
+	namespace
+	{
+		QList<QStringList> RunSelectFolders (const QList<Folder>& folders, const QString& title)
+		{
+			Util::CategorySelector sel;
+			sel.setWindowTitle (title);
+			sel.SetCaption (MailTab::tr ("Folders"));
+
+			QStringList folderNames;
+			QList<QStringList> folderPaths;
+			for (const auto& folder : folders)
+			{
+				folderNames << folder.Path_.join ("/");
+				folderPaths << folder.Path_;
+			}
+
+			sel.setPossibleSelections (folderNames, false);
+			sel.SetButtonsMode (Util::CategorySelector::ButtonsMode::AcceptReject);
+
+			if (sel.exec () != QDialog::Accepted)
+				return {};
+
+			QList<QStringList> selectedPaths;
+			for (const auto index : sel.GetSelectedIndexes ())
+				selectedPaths << folderPaths [index];
+			return selectedPaths;
+		}
+	}
+
+	void MailTab::handleCopyMultipleFolders ()
+	{
+		if (!CurrAcc_)
+			return;
+
+		const auto& ids = GetSelectedIds ();
+		if (ids.isEmpty ())
+			return;
+
+		const auto& selectedPaths = RunSelectFolders (GetActualFolders (),
+				ids.size () == 1 ?
+					tr ("Copy message") :
+					tr ("Copy %n message(s)", 0, ids.size ()));
+
+		if (selectedPaths.isEmpty ())
+			return;
+
+		CurrAcc_->CopyMessages (ids, CurrAcc_->GetMailModel ()->GetCurrentFolder (), selectedPaths);
+	}
+
 	void MailTab::handleCopyMessages (QAction *action)
 	{
 		if (!CurrAcc_)
 			return;
 
 		const auto& folderPath = action->property ("Snails/FolderPath").toStringList ();
+		if (folderPath.isEmpty ())
+			return;
 
 		const auto& ids = GetSelectedIds ();
 		CurrAcc_->CopyMessages (ids, CurrAcc_->GetMailModel ()->GetCurrentFolder (), { folderPath });
+	}
+
+	void MailTab::handleMoveMultipleFolders ()
+	{
+		if (!CurrAcc_)
+			return;
+
+		const auto& ids = GetSelectedIds ();
+		if (ids.isEmpty ())
+			return;
+
+		const auto& selectedPaths = RunSelectFolders (GetActualFolders (),
+				ids.size () == 1 ?
+					tr ("Move message") :
+					tr ("Move %n message(s)", 0, ids.size ()));
+
+		if (selectedPaths.isEmpty ())
+			return;
+
+		CurrAcc_->MoveMessages (ids, CurrAcc_->GetMailModel ()->GetCurrentFolder (), selectedPaths);
+	}
+
+	void MailTab::handleMoveMessages (QAction *action)
+	{
+		if (!CurrAcc_)
+			return;
+
+		const auto& folderPath = action->property ("Snails/FolderPath").toStringList ();
+		if (folderPath.isEmpty ())
+			return;
+
+		const auto& ids = GetSelectedIds ();
+		CurrAcc_->MoveMessages (ids, CurrAcc_->GetMailModel ()->GetCurrentFolder (), { folderPath });
 	}
 
 	void MailTab::handleMarkMsgUnread ()

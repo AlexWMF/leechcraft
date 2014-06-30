@@ -27,26 +27,83 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#pragma once
-
-#include <QIdentityProxyModel>
-#include <QSet>
+#include "dcac.h"
+#include <xmlsettingsdialog/xmlsettingsdialog.h>
+#include "viewsmanager.h"
+#include "xmlsettingsmanager.h"
 
 namespace LeechCraft
 {
-namespace LMP
+namespace Poshuku
 {
-	class UploadModel : public QIdentityProxyModel
+namespace DCAC
+{
+	void Plugin::Init (ICoreProxy_ptr)
 	{
-		QSet<QPersistentModelIndex> SourceIndexes_;
-	public:
-		UploadModel (QObject* = 0);
+		ViewsManager_ = new ViewsManager;
 
-		QSet<QPersistentModelIndex> GetSelectedIndexes () const;
+		XSD_.reset (new Util::XmlSettingsDialog);
+		XSD_->RegisterObject (&XmlSettingsManager::Instance (), "poshukudcacsettings.xml");
+	}
 
-		Qt::ItemFlags flags (const QModelIndex&) const;
-		QVariant data (const QModelIndex&, int) const;
-		bool setData (const QModelIndex&, const QVariant&, int);
-	};
+	void Plugin::SecondInit ()
+	{
+	}
+
+	void Plugin::Release ()
+	{
+		delete ViewsManager_;
+	}
+
+	QByteArray Plugin::GetUniqueID () const
+	{
+		return "org.LeechCraft.Poshuku.DCAC";
+	}
+
+	QString Plugin::GetName () const
+	{
+		return "Poshuku DC/AC";
+	}
+
+	QString Plugin::GetInfo () const
+	{
+		return tr ("Inverts the colors of web pages.");
+	}
+
+	QIcon Plugin::GetIcon () const
+	{
+		return QIcon ();
+	}
+
+	QSet<QByteArray> Plugin::GetPluginClasses () const
+	{
+		QSet<QByteArray> result;
+		result << "org.LeechCraft.Poshuku.Plugins/1.0";
+		return result;
+	}
+
+	Util::XmlSettingsDialog_ptr Plugin::GetSettingsDialog () const
+	{
+		return XSD_;
+	}
+
+	void Plugin::hookBrowserWidgetInitialized (IHookProxy_ptr,
+			QWebView *view,
+			QObject*)
+	{
+		ViewsManager_->AddView (view);
+	}
+
+	void Plugin::hookWebViewContextMenu (IHookProxy_ptr,
+			QWebView *view, QContextMenuEvent*, const QWebHitTestResult&,
+			QMenu *menu, WebViewCtxMenuStage menuBuildStage)
+	{
+		if (menuBuildStage == WVSAfterFinish)
+			menu->addAction (ViewsManager_->GetEnableAction (view));
+	}
 }
 }
+}
+
+LC_EXPORT_PLUGIN (leechcraft_poshuku_dcac, LeechCraft::Poshuku::DCAC::Plugin);
+

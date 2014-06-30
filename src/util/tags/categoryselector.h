@@ -29,11 +29,17 @@
 
 #pragma once
 
-#include <QTreeWidget>
+#include <memory>
+#include <QDialog>
 #include "tagsconfig.h"
 
 class QStringList;
 class QString;
+
+namespace Ui
+{
+	class CategorySelector;
+}
 
 namespace LeechCraft
 {
@@ -59,13 +65,22 @@ namespace LeechCraft
 		 * slots selectAll() and selectNone() which could be used to mark all
 		 * and no elements in the list respectively.
 		 */
-		class UTIL_TAGS_API CategorySelector : public QTreeWidget
+		class UTIL_TAGS_API CategorySelector : public QDialog
 		{
 			Q_OBJECT
+
+			std::shared_ptr<Ui::CategorySelector> Ui_;
 
 			QString Caption_;
 			QString Separator_;
 		public:
+			enum class ButtonsMode
+			{
+				NoButtons,
+				Close,
+				AcceptReject
+			};
+
 			/** @brief Constructor.
 			 *
 			 * Sets the default window title and window flags
@@ -91,9 +106,21 @@ namespace LeechCraft
 			 *
 			 * @return Selected items.
 			 *
-			 * @sa SetPossibleSelections
+			 * @sa SetPossibleSelections()
+			 * @sa GetSelectedIndexes()
 			 */
-			QStringList GetSelections ();
+			QStringList GetSelections () const;
+
+			/** @brief Gets the indexes of the selected items.
+			 *
+			 * Returns the indexes of the selected items in the array
+			 * passed to setPossibleSelections(). Please note that
+			 * sorting should be disabled in setPossibleSelections()
+			 * for this function to be useful.
+			 *
+			 * @sa GetSelections()
+			 */
+			QList<int> GetSelectedIndexes () const;
 
 			/** @brief Selects some of the items.
 			 *
@@ -112,7 +139,7 @@ namespace LeechCraft
 			 *
 			 * @sa SetSeparator()
 			 */
-			UTIL_TAGS_API QString GetSeparator () const;
+			QString GetSeparator () const;
 
 			/** @brief Sets the separator for the tags.
 			 *
@@ -120,7 +147,11 @@ namespace LeechCraft
 			 *
 			 * @sa GetSeparator()
 			 */
-			UTIL_TAGS_API void SetSeparator (const QString&);
+			void SetSeparator (const QString&);
+
+			/** @brief Sets the buttons mode.
+			 */
+			void SetButtonsMode (ButtonsMode);
 		protected:
 			/** @brief Checks whether after the move event the selector
 			 * won't be beoynd the screen. if it would, moves back.
@@ -130,20 +161,31 @@ namespace LeechCraft
 			/** @brief Selects all variants.
 			 */
 			void selectAll ();
+
 			/** @brief Deselects all variants.
 			 */
 			void selectNone ();
+
 			/** @brief Sets possible selections.
 			 *
 			 * Clears previous selections list, sets new possible selections
 			 * according to selections parameter. By default, no items are
 			 * selected.
 			 *
-			 * @param[in] selections Possible selections.
+			 * The \em selections list is sorted unless the \em sort
+			 * parameter is set to false. Please note that if you plan to
+			 * call GetSelectedIndexes() you should set \em sort to
+			 * false.
 			 *
-			 * @sa GetSelections
+			 * @param[in] selections Possible selections.
+			 * @param[in] sort Whether the selections should be sorted
+			 * (default is true).
+			 *
+			 * @sa GetSelections()
+			 * @sa GetSelectedIndexes()
 			 */
-			void setPossibleSelections (QStringList selections);
+			void setPossibleSelections (QStringList selections, bool sort = true);
+
 			/** @brief Notifies CategorySelector about logical selection
 			 * changes.
 			 *

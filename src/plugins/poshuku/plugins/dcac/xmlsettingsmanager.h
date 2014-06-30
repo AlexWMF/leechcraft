@@ -1,6 +1,6 @@
 /**********************************************************************
  * LeechCraft - modular cross-platform feature rich internet client.
- * Copyright (C) 2006-2014  Georg Rudoy
+ * Copyright (C) 2010-2011  Oleg Linkin
  *
  * Boost Software License - Version 1.0 - August 17th, 2003
  *
@@ -29,24 +29,26 @@
 
 #pragma once
 
-#include <QIdentityProxyModel>
-#include <QSet>
+#include <xmlsettingsdialog/basesettingsmanager.h>
 
 namespace LeechCraft
 {
-namespace LMP
+namespace Poshuku
 {
-	class UploadModel : public QIdentityProxyModel
+namespace DCAC
+{
+	class XmlSettingsManager : public Util::BaseSettingsManager
 	{
-		QSet<QPersistentModelIndex> SourceIndexes_;
+		Q_OBJECT
+
+		XmlSettingsManager ();
+	protected:
+		virtual void EndSettings (QSettings*) const;
+		virtual QSettings *BeginSettings () const;
 	public:
-		UploadModel (QObject* = 0);
-
-		QSet<QPersistentModelIndex> GetSelectedIndexes () const;
-
-		Qt::ItemFlags flags (const QModelIndex&) const;
-		QVariant data (const QModelIndex&, int) const;
-		bool setData (const QModelIndex&, const QVariant&, int);
+		static XmlSettingsManager& Instance ();
 	};
 }
 }
+}
+

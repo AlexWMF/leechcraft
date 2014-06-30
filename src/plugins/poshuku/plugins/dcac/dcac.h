@@ -29,24 +29,58 @@
 
 #pragma once
 
-#include <QIdentityProxyModel>
-#include <QSet>
+#include <QObject>
+#include <interfaces/iinfo.h>
+#include <interfaces/iplugin2.h>
+#include <interfaces/ihavesettings.h>
+#include <interfaces/core/ihookproxy.h>
+#include <interfaces/poshuku/poshukutypes.h>
+
+class QWebHitTestResult;
+class QWebView;
 
 namespace LeechCraft
 {
-namespace LMP
+namespace Poshuku
 {
-	class UploadModel : public QIdentityProxyModel
+namespace DCAC
+{
+	class ViewsManager;
+
+	class Plugin : public QObject
+				 , public IInfo
+				 , public IPlugin2
+				 , public IHaveSettings
 	{
-		QSet<QPersistentModelIndex> SourceIndexes_;
+		Q_OBJECT
+		Q_INTERFACES (IInfo IPlugin2 IHaveSettings)
+
+		ViewsManager *ViewsManager_;
+		Util::XmlSettingsDialog_ptr XSD_;
 	public:
-		UploadModel (QObject* = 0);
+		void Init (ICoreProxy_ptr);
+		void SecondInit ();
+		void Release ();
+		QByteArray GetUniqueID () const;
+		QString GetName () const;
+		QString GetInfo () const;
+		QIcon GetIcon () const;
 
-		QSet<QPersistentModelIndex> GetSelectedIndexes () const;
+		QSet<QByteArray> GetPluginClasses () const;
 
-		Qt::ItemFlags flags (const QModelIndex&) const;
-		QVariant data (const QModelIndex&, int) const;
-		bool setData (const QModelIndex&, const QVariant&, int);
+		Util::XmlSettingsDialog_ptr GetSettingsDialog () const;
+	public slots:
+		void hookBrowserWidgetInitialized (LeechCraft::IHookProxy_ptr proxy,
+				QWebView *view,
+				QObject *browserWidget);
+		void hookWebViewContextMenu (LeechCraft::IHookProxy_ptr proxy,
+				QWebView *view,
+				QContextMenuEvent *event,
+				const QWebHitTestResult& hitTestResult,
+				QMenu *menu,
+				WebViewCtxMenuStage menuBuildStage);
 	};
 }
 }
+}
+
