@@ -445,7 +445,7 @@ namespace Snails
 		}
 	}
 
-	void AccountThreadWorker::FetchMessagesPOP3 (Account::FetchFlags fetchFlags)
+	void AccountThreadWorker::FetchMessagesPOP3 ()
 	{
 		auto store = MakeStore ();
 		auto folder = store->getDefaultFolder ();
@@ -480,30 +480,12 @@ namespace Snails
 			return;
 		}
 
-		if (fetchFlags & Account::FetchNew)
-		{
-			if (folder->getFetchCapabilities () & vmime::net::fetchAttributes::FLAGS)
-			{
-				auto pos = std::remove_if (messages.begin (), messages.end (),
-						[] (decltype (messages.front ()) msg) { return msg->getFlags () & vmime::net::message::FLAG_SEEN; });
-				messages.erase (pos, messages.end ());
-				qDebug () << "fetching only new msgs:" << messages.size ();
-			}
-			else
-			{
-				qDebug () << "folder hasn't advertised support for flags :(";
-			}
-		}
-
-		auto newMessages = FetchFullMessages (messages);
-
+		const auto& newMessages = FetchFullMessages (messages);
 		emit gotMsgHeaders (newMessages, { "INBOX" });
 	}
 
-	void AccountThreadWorker::FetchMessagesIMAP (Account::FetchFlags,
-			const QList<QStringList>& origFolders,
-			vmime::shared_ptr<vmime::net::store> store,
-			const QByteArray& last)
+	void AccountThreadWorker::FetchMessagesIMAP (const QList<QStringList>& origFolders,
+			vmime::shared_ptr<vmime::net::store> store, const QByteArray& last)
 	{
 		for (const auto& folder : origFolders)
 		{
@@ -678,9 +660,9 @@ namespace Snails
 
 	namespace
 	{
-		void FullifyHeaderMessage (const Message_ptr& msg, const vmime::shared_ptr<vmime::message>& full)
+		void FullifyHeaderMessage (const Message_ptr& msg, const vmime::shared_ptr<vmime::net::message>& full)
 		{
-			vmime::messageParser mp { full };
+			vmime::messageParser mp { FromNetMessage (full) };
 
 			QString html;
 			QStringList plainParts;
@@ -791,7 +773,7 @@ namespace Snails
 
 			auto msgObj = FromHeaders (message);
 
-			FullifyHeaderMessage (msgObj, FromNetMessage (message));
+			FullifyHeaderMessage (msgObj, message);
 
 			newMessages << msgObj;
 		}
@@ -819,18 +801,18 @@ namespace Snails
 			set.addRange (vmime::net::numberMessageRange { num });
 	}
 
-	void AccountThreadWorker::synchronize (Account::FetchFlags flags, const QList<QStringList>& folders, const QByteArray& last)
+	void AccountThreadWorker::synchronize (const QList<QStringList>& folders, const QByteArray& last)
 	{
 		switch (A_->InType_)
 		{
 		case Account::InType::POP3:
-			FetchMessagesPOP3 (flags);
+			FetchMessagesPOP3 ();
 			break;
 		case Account::InType::IMAP:
 		{
 			const auto& store = MakeStore ();
 			SyncIMAPFolders (store);
-			FetchMessagesIMAP (flags, folders, store, last);
+			FetchMessagesIMAP (folders, store, last);
 			break;
 		}
 		case Account::InType::Maildir:
@@ -911,7 +893,7 @@ namespace Snails
 				return;
 			}
 
-			FullifyHeaderMessage (origMsg, FromNetMessage (messages.front ()));
+			FullifyHeaderMessage (origMsg, messages.front ());
 		}
 		catch (const vmime::exceptions::invalid_response& resp)
 		{

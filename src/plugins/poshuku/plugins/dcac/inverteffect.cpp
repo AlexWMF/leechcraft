@@ -29,6 +29,7 @@
 
 #include "inverteffect.h"
 #include <QPainter>
+#include <QtDebug>
 #include <qwebview.h>
 
 namespace LeechCraft
@@ -42,10 +43,21 @@ namespace DCAC
 	{
 	}
 
+	void InvertEffect::SetThreshold (int threshold)
+	{
+		if (threshold == Threshold_)
+			return;
+
+		Threshold_ = threshold;
+		update ();
+	}
+
 	void InvertEffect::draw (QPainter *painter)
 	{
 		QPoint offset;
-		auto image = sourcePixmap (Qt::DeviceCoordinates, &offset).toImage ();
+
+		const auto& sourcePx = sourcePixmap (Qt::LogicalCoordinates, &offset);
+		auto image = sourcePx.toImage ();
 		switch (image.format ())
 		{
 		case QImage::Format_ARGB32:
@@ -57,7 +69,7 @@ namespace DCAC
 		}
 		image.detach ();
 
-		painter->setWorldTransform ({});
+		uint64_t sourceGraySumR = 0, sourceGraySumG = 0, sourceGraySumB = 0;
 
 		const auto height = image.height ();
 		const auto width = image.width ();
@@ -67,12 +79,21 @@ namespace DCAC
 			for (int x = 0; x < width; ++x)
 			{
 				auto& color = scanline [x];
+				sourceGraySumR += qRed (color);
+				sourceGraySumG += qGreen (color);
+				sourceGraySumB += qBlue (color);
+
 				color &= 0x00ffffff;
 				color = uint32_t { 0xffffffff } - color;
 			}
 		}
 
-		painter->drawImage (offset, image);
+		const auto sourceGraySum = (sourceGraySumR * 11 + sourceGraySumG * 16 + sourceGraySumB * 5) / (width * height * 32);
+
+		if (sourceGraySum >= static_cast<uint64_t> (Threshold_))
+			painter->drawImage (offset, image);
+		else
+			painter->drawPixmap (offset, sourcePx);
 	}
 }
 }

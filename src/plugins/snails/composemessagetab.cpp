@@ -35,6 +35,7 @@
 #include <QMessageBox>
 #include <QFileIconProvider>
 #include <QInputDialog>
+#include <QTextDocument>
 #include <util/util.h>
 #include <util/sys/mimedetector.h>
 #include <interfaces/itexteditor.h>
@@ -168,24 +169,36 @@ namespace Snails
 			address = msg->GetAddress (Message::Address::From);
 		Ui_.To_->setText (GetNiceMail (address));
 
-		auto split = msg->GetBody ().split ('\n');
-		for (int i = 0; i < split.size (); ++i)
-		{
-			QString str = split.at (i).trimmed ();
-			if (str.at (0) != '>')
-				str.prepend (' ');
-			str.prepend ('>');
-			split [i] = str;
-		}
-
-		QString subj = msg->GetSubject ();
+		auto subj = msg->GetSubject ();
 		if (subj.left (3).toLower () != "re:")
 			subj.prepend ("Re: ");
 		Ui_.Subject_->setText (subj);
 
-		QString plainContent = split.join ("\n");
-		plainContent += "\n\n";
+		PrepareReplyBody (msg);
+	}
+
+	void ComposeMessageTab::PrepareReplyBody (const Message_ptr& msg)
+	{
+		auto plainSplit = msg->GetBody ().split ('\n');
+		for (auto& str : plainSplit)
+		{
+			str = str.trimmed ();
+			if (str.at (0) != '>')
+				str.prepend (' ');
+			str.prepend ('>');
+		}
+
+		const auto& plainContent = plainSplit.join ("\n") + "\n\n";
 		MsgEdit_->SetContents (plainContent, ContentType::PlainText);
+
+		const auto quoteStartMarker = "<span style='border-left: 2px solid #900060; padding-left: 0.5em;'>";
+		const auto quoteEndMarker = "</span>";
+
+		for (auto& str : plainSplit)
+			str = quoteStartMarker + Qt::escape (str) + quoteEndMarker;
+
+		auto htmlBody = plainSplit.join ("<br/>");
+		MsgEdit_->SetContents (htmlBody, ContentType::HTML);
 	}
 
 	namespace

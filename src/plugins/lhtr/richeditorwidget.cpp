@@ -355,7 +355,7 @@ namespace LHTR
 		return QString ();
 	}
 
-	void RichEditorWidget::SetContents (const QString& contents, ContentType type)
+	void RichEditorWidget::SetContents (QString contents, ContentType type)
 	{
 		QString content;
 		content += "<!DOCTYPE html PUBLIC";
@@ -368,6 +368,7 @@ namespace LHTR
 			content += contents;
 			break;
 		case ContentType::PlainText:
+			contents.replace ('\n', "<br/>");
 			content += "<pre>" + contents + "</pre>";
 			break;
 		}
