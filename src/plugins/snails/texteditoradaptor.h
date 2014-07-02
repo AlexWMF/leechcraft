@@ -29,70 +29,34 @@
 
 #pragma once
 
-#include <QWidget>
-#include <interfaces/ihavetabs.h>
-#include "ui_composemessagetab.h"
-#include "account.h"
+#include <interfaces/itexteditor.h>
 
-class QSignalMapper;
-class IEditorWidget;
+class QTextEdit;
 
 namespace LeechCraft
 {
 namespace Snails
 {
-	class ComposeMessageTab : public QWidget
-							, public ITabWidget
+	class TextEditorAdaptor : public QObject
+							, public IEditorWidget
 	{
 		Q_OBJECT
-		Q_INTERFACES (ITabWidget)
+		Q_INTERFACES (IEditorWidget)
 
-		static QObject *S_ParentPlugin_;
-		static TabClassInfo S_TabClassInfo_;
-
-		Ui::ComposeMessageTab Ui_;
-
-		QToolBar *Toolbar_;
-		QMenu *AccountsMenu_;
-		QMenu *AttachmentsMenu_;
-		QMenu *EditorsMenu_;
-
-		QSignalMapper *EditorsMapper_;
-
-		QList<QWidget*> MsgEditWidgets_;
-		QList<IEditorWidget*> MsgEdits_;
-
-		Message_ptr ReplyMessage_;
+		QTextEdit * const Edit_;
 	public:
-		static void SetParentPlugin (QObject*);
-		static void SetTabClassInfo (const TabClassInfo&);
+		TextEditorAdaptor (QTextEdit*);
 
-		ComposeMessageTab (QWidget* = 0);
+		QString GetContents (ContentType type) const;
+		void SetContents (QString contents, ContentType type);
 
-		TabClassInfo GetTabClassInfo () const;
-		QObject* ParentMultiTabs();
-		void Remove();
-		QToolBar* GetToolBar() const;
-
-		void SelectAccount (const Account_ptr&);
-		void PrepareReply (const Message_ptr&);
-	private:
-		void PrepareReplyBody (const Message_ptr&);
-
-		void SetupToolbar ();
-		void SetupEditors ();
-
-		IEditorWidget* GetCurrentEditor () const;
-
-		void SetMessageReferences (const Message_ptr&) const;
-	private slots:
-		void handleSend ();
-		void handleAddAttachment ();
-		void handleRemoveAttachment ();
-
-		void handleEditorSelected (int);
+		QAction* GetEditorAction (EditorAction);
+		void AppendAction (QAction*);
+		void AppendSeparator ();
+		void RemoveAction (QAction*);
+		void SetBackgroundColor (const QColor&, ContentType);
 	signals:
-		void removeTab (QWidget*);
+		void textChanged();
 	};
 }
 }

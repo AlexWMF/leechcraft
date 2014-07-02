@@ -27,72 +27,59 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#pragma once
-
-#include <QWidget>
-#include <interfaces/ihavetabs.h>
-#include "ui_composemessagetab.h"
-#include "account.h"
-
-class QSignalMapper;
-class IEditorWidget;
+#include "texteditoradaptor.h"
+#include <QTextEdit>
 
 namespace LeechCraft
 {
 namespace Snails
 {
-	class ComposeMessageTab : public QWidget
-							, public ITabWidget
+	TextEditorAdaptor::TextEditorAdaptor (QTextEdit *edit)
+	: QObject { edit }
+	, Edit_ { edit }
 	{
-		Q_OBJECT
-		Q_INTERFACES (ITabWidget)
+		connect (Edit_,
+				SIGNAL (textChanged ()),
+				this,
+				SIGNAL (textChanged ()));
+	}
 
-		static QObject *S_ParentPlugin_;
-		static TabClassInfo S_TabClassInfo_;
+	QString TextEditorAdaptor::GetContents (ContentType type) const
+	{
+		switch (type)
+		{
+		case ContentType::PlainText:
+			return Edit_->toPlainText ();
+		default:
+			return {};
+		}
+	}
 
-		Ui::ComposeMessageTab Ui_;
+	void TextEditorAdaptor::SetContents (QString contents, ContentType type)
+	{
+		if (type == ContentType::PlainText)
+			Edit_->setPlainText (contents);
+	}
 
-		QToolBar *Toolbar_;
-		QMenu *AccountsMenu_;
-		QMenu *AttachmentsMenu_;
-		QMenu *EditorsMenu_;
+	QAction* TextEditorAdaptor::GetEditorAction (EditorAction)
+	{
+		return nullptr;
+	}
 
-		QSignalMapper *EditorsMapper_;
+	void TextEditorAdaptor::AppendAction (QAction*)
+	{
+	}
 
-		QList<QWidget*> MsgEditWidgets_;
-		QList<IEditorWidget*> MsgEdits_;
+	void TextEditorAdaptor::AppendSeparator ()
+	{
+	}
 
-		Message_ptr ReplyMessage_;
-	public:
-		static void SetParentPlugin (QObject*);
-		static void SetTabClassInfo (const TabClassInfo&);
+	void TextEditorAdaptor::RemoveAction (QAction*)
+	{
+	}
 
-		ComposeMessageTab (QWidget* = 0);
-
-		TabClassInfo GetTabClassInfo () const;
-		QObject* ParentMultiTabs();
-		void Remove();
-		QToolBar* GetToolBar() const;
-
-		void SelectAccount (const Account_ptr&);
-		void PrepareReply (const Message_ptr&);
-	private:
-		void PrepareReplyBody (const Message_ptr&);
-
-		void SetupToolbar ();
-		void SetupEditors ();
-
-		IEditorWidget* GetCurrentEditor () const;
-
-		void SetMessageReferences (const Message_ptr&) const;
-	private slots:
-		void handleSend ();
-		void handleAddAttachment ();
-		void handleRemoveAttachment ();
-
-		void handleEditorSelected (int);
-	signals:
-		void removeTab (QWidget*);
-	};
+	void TextEditorAdaptor::SetBackgroundColor (const QColor&, ContentType)
+	{
+	}
 }
 }

@@ -1001,15 +1001,40 @@ namespace Snails
 
 	namespace
 	{
-		vmime::mailbox FromPair (const QString& name, const QString& email)
+		vmime::shared_ptr<vmime::mailbox> FromPair (const QPair<QString, QString>& pair)
 		{
-			return vmime::mailbox (vmime::text (name.toUtf8 ().constData ()),
-					email.toUtf8 ().constData ());
+			return vmime::make_shared<vmime::mailbox> (vmime::text (pair.first.toUtf8 ().constData ()),
+					pair.second.toUtf8 ().constData ());
 		}
 
-		vmime::mailbox FromPair (const QPair<QString, QString>& pair)
+		vmime::addressList ToAddressList (const Message::Addresses_t& addresses)
 		{
-			return FromPair (pair.first, pair.second);
+			vmime::addressList result;
+			for (const auto& pair : addresses)
+				result.appendAddress (FromPair (pair));
+			return result;
+		}
+
+		vmime::messageIdSequence ToMessageIdSequence (const QList<QByteArray>& ids)
+		{
+			vmime::messageIdSequence result;
+			for (const auto& id : ids)
+				result.appendMessageId (vmime::make_shared<vmime::messageId> (id.constData ()));
+			return result;
+		}
+
+		vmime::messageId GenerateMsgId (const Message_ptr& msg)
+		{
+			const auto& senderAddress = msg->GetAddress (Message::Address::From).second;
+
+			const auto& contents = msg->GetBody ().toUtf8 ();
+			const auto& contentsHash = QCryptographicHash::hash (contents, QCryptographicHash::Sha1).toBase64 ();
+
+			const auto& now = QDateTime::currentDateTime ();
+
+			const auto& id = now.toString ("ddMMyyyy.hhmmsszzzap") + '%' + contentsHash + '%' + senderAddress;
+
+			return vmime::string { id.toUtf8 ().constData () };
 		}
 	}
 
@@ -1020,18 +1045,12 @@ namespace Snails
 
 		vmime::messageBuilder mb;
 		mb.setSubject (vmime::text (msg->GetSubject ().toUtf8 ().constData ()));
-		mb.setExpeditor (FromPair (msg->GetAddress (Message::Address::From)));
+		mb.setExpeditor (*FromPair (msg->GetAddress (Message::Address::From)));
+		mb.setRecipients (ToAddressList (msg->GetAddresses (Message::Address::To)));
+		mb.setCopyRecipients (ToAddressList (msg->GetAddresses (Message::Address::Cc)));
+		mb.setBlindCopyRecipients (ToAddressList (msg->GetAddresses (Message::Address::Bcc)));
 
-		vmime::addressList recips;
-		const auto& tos = msg->GetAddresses (Message::Address::To);
-		std::for_each (tos.begin (), tos.end (),
-				[&recips] (decltype (tos.front ()) pair)
-				{
-					recips.appendAddress (vmime::make_shared<vmime::mailbox> (FromPair (pair)));
-				});
-		mb.setRecipients (recips);
-
-		const QString& html = msg->GetHTMLBody ();
+		const auto& html = msg->GetHTMLBody ();
 
 		if (html.isEmpty ())
 		{
@@ -1041,7 +1060,7 @@ namespace Snails
 		else
 		{
 			mb.constructTextPart ({ vmime::mediaTypes::TEXT, vmime::mediaTypes::TEXT_HTML });
-			auto textPart = vmime::dynamicCast<vmime::htmlTextPart> (mb.getTextPart ());
+			const auto& textPart = vmime::dynamicCast<vmime::htmlTextPart> (mb.getTextPart ());
 			textPart->setCharset (vmime::charsets::UTF_8);
 			textPart->setText (vmime::make_shared<vmime::stringContentHandler> (html.toUtf8 ().constData ()));
 			textPart->setPlainText (vmime::make_shared<vmime::stringContentHandler> (msg->GetBody ().toUtf8 ().constData ()));
@@ -1052,7 +1071,7 @@ namespace Snails
 			try
 			{
 				const QFileInfo fi (descr.GetName ());
-				auto att = vmime::make_shared<vmime::fileAttachment> (descr.GetName ().toUtf8 ().constData (),
+				const auto& att = vmime::make_shared<vmime::fileAttachment> (descr.GetName ().toUtf8 ().constData (),
 						vmime::mediaType (descr.GetType ().constData (), descr.GetSubType ().constData ()),
 						vmime::text (descr.GetDescr ().toUtf8 ().constData ()));
 				att->getFileInfo ().setFilename (fi.fileName ().toUtf8 ().constData ());
@@ -1069,10 +1088,18 @@ namespace Snails
 			}
 		}
 
-		auto vMsg = mb.construct ();
+		const auto& vMsg = mb.construct ();
 		const auto& userAgent = QString ("LeechCraft Snails %1")
 				.arg (Core::Instance ().GetProxy ()->GetVersion ());
-		vMsg->getHeader ()->UserAgent ()->setValue (userAgent.toUtf8 ().constData ());
+		const auto& header = vMsg->getHeader ();
+		header->UserAgent ()->setValue (userAgent.toUtf8 ().constData ());
+
+		if (!msg->GetInReplyTo ().isEmpty ())
+			header->InReplyTo ()->setValue (ToMessageIdSequence (msg->GetInReplyTo ()));
+		if (!msg->GetReferences ().isEmpty ())
+			header->References ()->setValue (ToMessageIdSequence (msg->GetReferences ()));
+
+		header->MessageId ()->setValue (GenerateMsgId (msg));
 
 		auto pl = MkPgListener (tr ("Sending message %1...").arg (msg->GetSubject ()));
 		auto transport = MakeTransport ();
