@@ -31,6 +31,10 @@
 
 #ifdef Q_OS_LINUX
 #include <sys/sendfile.h>
+#elif defined (Q_OS_FREEBSD)
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/uio.h>
 #elif defined (Q_OS_MAC)
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -302,25 +306,29 @@ namespace HttHare
 #ifdef Q_OS_LINUX
 					const auto rc = sendfile (Sock_.native_handle (),
 							File_->handle (), &offset, toTransfer);
+					const auto transferred = rc > 0 ? rc : 0;
+					const auto errCode = rc > 0 ? 0 : errno;
+#elif defined (Q_OS_FREEBSD)
+					off_t transferred = toTransfer;
+					const auto rc = sendfile (File_->handle (), Sock_.native_handle (),
+							offset, toTransfer, nullptr, &transferred, 0);
+					if (rc == -1)
+						transferred = 0;
+					const auto errCode = rc == -1 ? errno : 0;
 #elif defined (Q_OS_MAC)
-					// Some glue code to make it work like in Linux,
-					// where the amount of transferred data is returned
-					// from sendfile().
 					auto transferred = toTransfer;
-					auto rc = sendfile (File_->handle (),
+					auto errCode = sendfile (File_->handle (),
 							Sock_.native_handle (),
 							offset, &transferred,
 							nullptr, 0);
-					if (!rc)
-						rc = transferred;
 #endif
-					ec = boost::system::error_code (rc < 0 ? errno : 0,
+					ec = boost::system::error_code (errCode,
 							boost::asio::error::get_system_category ());
 
-					if (rc > 0)
+					if (!errCode)
 					{
 						CurrentRange_.first = offset;
-						toTransfer -= rc;
+						toTransfer -= transferred;
 					}
 
 					if (ec == boost::asio::error::interrupted)

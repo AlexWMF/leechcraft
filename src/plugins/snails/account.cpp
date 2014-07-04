@@ -181,7 +181,7 @@ namespace Snails
 			});
 	}
 
-	void Account::FetchWholeMessage (Message_ptr msg)
+	void Account::FetchWholeMessage (const Message_ptr& msg)
 	{
 		MessageFetchThread_->AddTask ({
 				"fetchWholeMessage",
@@ -189,7 +189,7 @@ namespace Snails
 			});
 	}
 
-	void Account::SendMessage (Message_ptr msg)
+	QFuture<void> Account::SendMessage (const Message_ptr& msg)
 	{
 		auto pair = msg->GetAddress (Message::Address::From);
 		if (pair.first.isEmpty ())
@@ -198,13 +198,13 @@ namespace Snails
 			pair.second = UserEmail_;
 		msg->SetAddress (Message::Address::From, pair);
 
-		MessageFetchThread_->AddTask ({
+		return MessageFetchThread_->AddTask ({
 				"sendMessage",
 				{ msg }
 			});
 	}
 
-	void Account::FetchAttachment (Message_ptr msg,
+	void Account::FetchAttachment (const Message_ptr& msg,
 			const QString& attName, const QString& path)
 	{
 		MessageFetchThread_->AddTask ({
@@ -437,6 +437,10 @@ namespace Snails
 			}
 
 			InSecurityRequired_ = dia->GetInSecurityRequired ();
+
+			OutSecurity_ = dia->GetOutSecurity ();
+			OutSecurityRequired_ = dia->GetOutSecurityRequired ();
+
 			SMTPNeedsAuth_ = dia->GetSMTPAuth ();
 			APOP_ = dia->GetAPOP ();
 			APOPFail_ = dia->GetAPOPRequired ();

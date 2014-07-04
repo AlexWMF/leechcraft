@@ -30,6 +30,7 @@
 #include "taskqueuemanager.h"
 #include <QMutexLocker>
 #include "accountthreadworker.h"
+#include "concurrentexceptions.h"
 
 namespace LeechCraft
 {
@@ -131,9 +132,11 @@ namespace Snails
 			if (item.Method_.isEmpty ())
 				break;
 
-			try
+			item.Promise_->reportStarted ();
+
+			const auto invoke = [this, &item]
 			{
-				const bool res = QMetaObject::invokeMethod (ATW_,
+				return QMetaObject::invokeMethod (ATW_,
 						item.Method_,
 						Qt::DirectConnection,
 						item.Args_.value (0),
@@ -146,23 +149,45 @@ namespace Snails
 						item.Args_.value (7),
 						item.Args_.value (8),
 						item.Args_.value (9));
+			};
+
+			try
+			{
+				const bool res = invoke ();
 
 				if (!res)
+				{
 					qWarning () << Q_FUNC_INFO
 							<< "unable to call"
 							<< item.Method_
 							<< "with"
 							<< item.Args_;
+					item.Promise_->reportException (InvokeFailedException { item });
+				}
 			}
 			catch (const vmime::exceptions::authentication_error& err)
 			{
+				const auto& respStr = QString::fromUtf8 (err.response ().c_str ());
+
 				qWarning () << Q_FUNC_INFO
 						<< "caught auth error:"
-						<< err.response ().c_str ()
+						<< respStr
 						<< "while calling"
 						<< item.Method_
 						<< "with"
 						<< item.Args_;
+
+				item.Promise_->reportException (AuthorizationException { respStr });
+			}
+			catch (const vmime::exceptions::operation_timed_out&)
+			{
+				qWarning () << Q_FUNC_INFO
+						<< "timeout while calling"
+						<< item.Method_
+						<< "with"
+						<< item.Args_;
+
+				item.Promise_->reportException (TimeoutException {});
 			}
 			catch (const std::exception& e)
 			{
@@ -173,7 +198,10 @@ namespace Snails
 						<< item.Method_
 						<< "with"
 						<< item.Args_;
+				item.Promise_->reportException (MakeWrappedException (e));
 			}
+
+			item.Promise_->reportFinished ();
 		}
 		qDebug () << Q_FUNC_INFO << "done";
 	}

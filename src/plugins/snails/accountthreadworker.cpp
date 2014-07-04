@@ -207,6 +207,7 @@ namespace Snails
 		}
 
 		auto trp = Session_->getTransport (vmime::utility::url (url.toUtf8 ().constData ()));
+		trp->setCertificateVerifier (CertVerifier_);
 
 		if (setAuth)
 		{
@@ -215,15 +216,12 @@ namespace Snails
 			trp->setProperty ("auth.password", password.toUtf8 ().constData ());
 		}
 		trp->setProperty ("server.port", A_->OutPort_);
-		trp->setCertificateVerifier (CertVerifier_);
 
 		if (A_->OutSecurity_ == Account::SecurityType::TLS)
 		{
-			trp->setProperty ("connection.tls", A_->UseTLS_);
+			trp->setProperty ("connection.tls", true);
 			trp->setProperty ("connection.tls.required", A_->OutSecurityRequired_);
 		}
-		trp->setProperty ("options.sasl", true);
-		trp->setProperty ("options.sasl.fallback", A_->SASLRequired_);
 
 		return trp;
 	}
@@ -1038,7 +1036,7 @@ namespace Snails
 		}
 	}
 
-	void AccountThreadWorker::sendMessage (Message_ptr msg)
+	void AccountThreadWorker::sendMessage (const Message_ptr& msg)
 	{
 		if (!msg)
 			return;
@@ -1105,7 +1103,8 @@ namespace Snails
 		auto transport = MakeTransport ();
 		try
 		{
-			transport->connect ();
+			if (!transport->isConnected ())
+				transport->connect ();
 		}
 		catch (const vmime::exceptions::authentication_error& e)
 		{
@@ -1114,7 +1113,7 @@ namespace Snails
 					<< e.what ()
 					<< "with response"
 					<< e.response ().c_str ();
-			return;
+			throw;
 		}
 		transport->send (vMsg, pl);
 	}

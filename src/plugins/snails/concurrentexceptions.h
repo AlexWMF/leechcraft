@@ -29,96 +29,73 @@
 
 #pragma once
 
-#include <memory>
-#include <QMetaType>
-#include <QPointer>
-#include <QDebug>
+#include <QFutureInterface>
+#include "taskqueuemanager.h"
 
 namespace LeechCraft
 {
 namespace Snails
 {
-	class ValuedMetaArgument
+	template<typename T>
+	class ConcurrentExceptionMixin : public QtConcurrent::Exception
 	{
-		struct HolderBase
-		{
-			virtual int GetTypeId () const = 0;
-			virtual const char* GetTypeName () const = 0;
-			virtual const void* GetValue () const = 0;
-
-			virtual bool Equals (const HolderBase&) const = 0;
-
-			virtual void DebugPrint (QDebug&) const = 0;
-		};
-
-		std::shared_ptr<HolderBase> Holder_;
-
-		template<typename T>
-		struct Holder : HolderBase
-		{
-			const T T_;
-
-			Holder (const T& t)
-			: T_ { t }
-			{
-			}
-
-			int GetTypeId () const
-			{
-				return qMetaTypeId<T> ();
-			}
-
-			const char* GetTypeName () const
-			{
-				return QMetaType::typeName (qMetaTypeId<T> ());
-			}
-
-			const void* GetValue () const
-			{
-				return static_cast<const void*> (&T_);
-			}
-
-			bool Equals (const HolderBase& other) const
-			{
-				if (GetTypeId () != other.GetTypeId ())
-					return false;
-
-				return T_ == static_cast<const Holder<T>&> (other).T_;
-			}
-
-			void DebugPrint (QDebug& out) const
-			{
-				out << T_;
-			}
-		};
 	public:
-		ValuedMetaArgument () = default;
+		void raise () const override
+		{
+			throw *dynamic_cast<const T*> (this);
+		}
 
-		template<typename T>
-		ValuedMetaArgument (const T& t)
-		: Holder_ { new Holder<T> { t } }
+		Exception* clone () const override
+		{
+			return new T { *dynamic_cast<const T*> (this) };
+		}
+	};
+
+	class InvokeFailedException : public ConcurrentExceptionMixin<InvokeFailedException>
+	{
+		const TaskQueueItem Item_;
+		const QByteArray What_;
+	public:
+		InvokeFailedException (const TaskQueueItem&);
+
+		const char* what () const noexcept override;
+	};
+
+	class AuthorizationException : public ConcurrentExceptionMixin<AuthorizationException>
+	{
+		const QString Message_;
+	public:
+		AuthorizationException (const QString&);
+
+		const QString& GetMessage () const;
+	};
+
+	class TimeoutException : public ConcurrentExceptionMixin<TimeoutException>
+	{
+	public:
+		TimeoutException () = default;
+	};
+
+	template<typename Wrapped>
+	class WrappedException : public ConcurrentExceptionMixin<WrappedException<Wrapped>>
+	{
+		const Wrapped W_;
+	public:
+		WrappedException (const Wrapped& w)
+		: W_ { w }
 		{
 		}
 
-		operator QGenericArgument () const;
-
-		bool operator== (const ValuedMetaArgument& other) const;
-
-		void DebugPrint (QDebug&) const;
+		const char* what () const noexcept override
+		{
+			return W_.what ();
+		}
 	};
-}
-}
 
-template<typename T>
-QDebug operator<< (QDebug out, const QPointer<T>& ptr)
-{
-	return out << ptr.data ();
+	template<typename Wrapped>
+	WrappedException<Wrapped> MakeWrappedException (const Wrapped& e)
+	{
+		return { e };
+	}
 }
-
-template<typename T>
-QDebug operator<< (QDebug out, const std::shared_ptr<T>& ptr)
-{
-	return out << ptr.get ();
 }
-
-QDebug operator<< (QDebug, const LeechCraft::Snails::ValuedMetaArgument&);

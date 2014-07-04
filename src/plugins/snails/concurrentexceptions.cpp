@@ -27,98 +27,48 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#pragma once
-
-#include <memory>
-#include <QMetaType>
-#include <QPointer>
-#include <QDebug>
+#include "concurrentexceptions.h"
 
 namespace LeechCraft
 {
 namespace Snails
 {
-	class ValuedMetaArgument
+	namespace
 	{
-		struct HolderBase
+		QByteArray MakeWhat (const TaskQueueItem& item)
 		{
-			virtual int GetTypeId () const = 0;
-			virtual const char* GetTypeName () const = 0;
-			virtual const void* GetValue () const = 0;
+			QString str;
 
-			virtual bool Equals (const HolderBase&) const = 0;
+			QDebug debug { &str };
+			debug << Q_FUNC_INFO
+					<< "unable to call"
+					<< item.Method_
+					<< "with"
+					<< item.Args_;
 
-			virtual void DebugPrint (QDebug&) const = 0;
-		};
-
-		std::shared_ptr<HolderBase> Holder_;
-
-		template<typename T>
-		struct Holder : HolderBase
-		{
-			const T T_;
-
-			Holder (const T& t)
-			: T_ { t }
-			{
-			}
-
-			int GetTypeId () const
-			{
-				return qMetaTypeId<T> ();
-			}
-
-			const char* GetTypeName () const
-			{
-				return QMetaType::typeName (qMetaTypeId<T> ());
-			}
-
-			const void* GetValue () const
-			{
-				return static_cast<const void*> (&T_);
-			}
-
-			bool Equals (const HolderBase& other) const
-			{
-				if (GetTypeId () != other.GetTypeId ())
-					return false;
-
-				return T_ == static_cast<const Holder<T>&> (other).T_;
-			}
-
-			void DebugPrint (QDebug& out) const
-			{
-				out << T_;
-			}
-		};
-	public:
-		ValuedMetaArgument () = default;
-
-		template<typename T>
-		ValuedMetaArgument (const T& t)
-		: Holder_ { new Holder<T> { t } }
-		{
+			return str.toUtf8 ();
 		}
+	}
 
-		operator QGenericArgument () const;
+	InvokeFailedException::InvokeFailedException (const TaskQueueItem& item)
+	: Item_ { item }
+	, What_ { MakeWhat (item) }
+	{
+	}
 
-		bool operator== (const ValuedMetaArgument& other) const;
+	const char* InvokeFailedException::what () const noexcept
+	{
+		return What_.constData ();
+	}
 
-		void DebugPrint (QDebug&) const;
-	};
+	AuthorizationException::AuthorizationException (const QString& msg)
+	: Message_ { msg }
+	{
+	}
+
+	const QString& AuthorizationException::GetMessage () const
+	{
+		return Message_;
+	}
 }
 }
-
-template<typename T>
-QDebug operator<< (QDebug out, const QPointer<T>& ptr)
-{
-	return out << ptr.data ();
-}
-
-template<typename T>
-QDebug operator<< (QDebug out, const std::shared_ptr<T>& ptr)
-{
-	return out << ptr.get ();
-}
-
-QDebug operator<< (QDebug, const LeechCraft::Snails::ValuedMetaArgument&);

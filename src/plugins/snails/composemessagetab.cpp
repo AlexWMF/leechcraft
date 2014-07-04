@@ -38,15 +38,20 @@
 #include <QTextDocument>
 #include <QToolButton>
 #include <QSignalMapper>
+#include <QFuture>
+#include <QFutureWatcher>
 #include <util/util.h>
 #include <util/sys/mimedetector.h>
+#include <util/xpc/util.h>
 #include <interfaces/itexteditor.h>
 #include <interfaces/core/ipluginsmanager.h>
 #include <interfaces/core/iiconthememanager.h>
+#include <interfaces/core/ientitymanager.h>
 #include <interfaces/iinfo.h>
 #include "message.h"
 #include "core.h"
 #include "texteditoradaptor.h"
+#include "concurrentexceptions.h"
 
 namespace LeechCraft
 {
@@ -276,6 +281,37 @@ namespace Snails
 		message->SetReferences (references);
 	}
 
+	void ComposeMessageTab::handleMessageSent ()
+	{
+		const auto watcher = dynamic_cast<QFutureWatcher<void>*> (sender ());
+		watcher->deleteLater ();
+
+		try
+		{
+			watcher->waitForFinished ();
+			Remove ();
+		}
+		catch (const AuthorizationException& err)
+		{
+			QMessageBox::critical (this, "LeechCraft",
+					tr ("Unable to send the message: authorization failure. Server reports: %1.")
+						.arg ("<br/><em>" + err.GetMessage () + "</em>"));
+		}
+		catch (const TimeoutException&)
+		{
+			const auto& notify = Util::MakeNotification ("Snails",
+					tr ("Unable to send email: operation timed out.<br/><br/>"
+						"Consider switching between SSL and TLS/STARTSSL or replacing port 465 with 587, or vice versa."
+						"Port 465 is typically used with SSL, while port 587 is used with TLS."),
+					PCritical_);
+			Core::Instance ().GetProxy ()->GetEntityManager ()->HandleEntity (notify);
+		}
+		catch (const std::exception& e)
+		{
+			qWarning () << Q_FUNC_INFO << "caught exception:" <<  e.what ();
+		}
+	}
+
 	namespace
 	{
 		Message::Addresses_t FromUserInput (const QString& text)
@@ -350,7 +386,13 @@ namespace Snails
 			message->AddAttachment ({ path, descr, type, subtype, QFileInfo (path).size () });
 		}
 
-		account->SendMessage (message);
+		const auto watcher = new QFutureWatcher<void> { this };
+		connect (watcher,
+				SIGNAL (finished ()),
+				this,
+				SLOT (handleMessageSent ()));
+		const auto& future = account->SendMessage (message);
+		watcher->setFuture (future);
 	}
 
 	void ComposeMessageTab::handleAddAttachment ()
