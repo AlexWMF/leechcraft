@@ -31,11 +31,13 @@
 #include <QDesktopServices>
 #include <QImage>
 #include <QUrl>
+#include <QDateTime>
 #include <QWebPage>
 #include <QWebFrame>
 #include <QPainter>
 #include <util/sys/paths.h>
 #include <util/sll/delayedexecutor.h>
+#include "xmlsettingsmanager.h"
 
 namespace LeechCraft
 {
@@ -55,11 +57,19 @@ namespace SpeedDial
 	QImage ImageCache::GetSnapshot (const QUrl& url)
 	{
 		const auto& filename = QString::number (qHash (url)) + ".png";
-		if (CacheDir_.exists (filename))
+		const auto& path = CacheDir_.filePath (filename);
+		const QFileInfo info { path };
+		if (info.exists ())
 		{
-			QImage result { CacheDir_.filePath (filename) };
-			if (!result.isNull ())
-				return result;
+			const auto validity = XmlSettingsManager::Instance ().property ("ValidFor").toInt ();
+			if (info.lastModified ().daysTo (QDateTime::currentDateTime ()) <= validity)
+			{
+				QImage result { path };
+				if (!result.isNull ())
+					return result;
+			}
+
+			QFile::remove (path);
 		}
 
 		if (Url2Page_.contains (url))

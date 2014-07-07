@@ -28,7 +28,7 @@
  **********************************************************************/
 
 #include "speeddial.h"
-#include <vector>
+#include <util/util.h>
 #include <interfaces/poshuku/iproxyobject.h>
 #include "viewhandler.h"
 #include "imagecache.h"
@@ -43,6 +43,8 @@ namespace SpeedDial
 {
 	void Plugin::Init (ICoreProxy_ptr proxy)
 	{
+		Util::InstallTranslator ("poshuku_speeddial");
+
 		Cache_ = new ImageCache { proxy };
 
 		qRegisterMetaType<AddrList_t> ("LeechCraft::Poshuku::SpeedDial::AddrList_t");

@@ -19,7 +19,9 @@ set (FORMS
 	proxiesconfigwidget.ui
 	)
 QT4_WRAP_UI (UIS_H ${FORMS})
+
 CreateTrs ("xproxy" "en;ru_RU" COMPILED_TRANSLATIONS)
+CreateTrsUpTarget("xproxy" "en;ru_RU" "${SRCS}" "${FORMS}" "xproxysettings.xml")
 
 add_library (leechcraft_xproxy SHARED
 	${COMPILED_TRANSLATIONS}
@@ -32,4 +34,3 @@ target_link_libraries (leechcraft_xproxy
 	)
 install (TARGETS leechcraft_xproxy DESTINATION ${LC_PLUGINS_DEST})
 install (FILES xproxysettings.xml DESTINATION ${LC_SETTINGS_DEST})
-install (FILES ${COMPILED_TRANSLATIONS} DESTINATION ${LC_TRANSLATIONS_DEST})

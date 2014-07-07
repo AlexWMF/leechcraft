@@ -27,74 +27,82 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#include "inverteffect.h"
-#include <QPainter>
-#include <QtDebug>
-#include <qwebview.h>
+#include "mucommands.h"
+#include <QIcon>
+#include <interfaces/azoth/iclentry.h>
+#include <interfaces/azoth/iproxyobject.h>
+#include "commands.h"
 
 namespace LeechCraft
 {
-namespace Poshuku
+namespace Azoth
 {
-namespace DCAC
+namespace MuCommands
 {
-	InvertEffect::InvertEffect (QWebView *view)
-	: QGraphicsEffect { view }
+	void Plugin::Init (ICoreProxy_ptr)
 	{
 	}
 
-	void InvertEffect::SetThreshold (int threshold)
+	void Plugin::SecondInit ()
 	{
-		if (threshold == Threshold_)
-			return;
-
-		Threshold_ = threshold;
-		update ();
-	}
-
-	void InvertEffect::draw (QPainter *painter)
-	{
-		QPoint offset;
-
-		const auto& sourcePx = sourcePixmap (Qt::LogicalCoordinates, &offset, QGraphicsEffect::NoPad);
-		auto image = sourcePx.toImage ();
-		switch (image.format ())
+		Names_ = StaticCommand
 		{
-		case QImage::Format_ARGB32:
-		case QImage::Format_ARGB32_Premultiplied:
-			break;
-		default:
-			image = image.convertToFormat (QImage::Format_ARGB32);
-			break;
-		}
-		image.detach ();
+			"/names",
+			[this] (ICLEntry *e, const QString& t) { return HandleNames (AzothProxy_, e, t); }
+		};
 
-		uint64_t sourceGraySumR = 0, sourceGraySumG = 0, sourceGraySumB = 0;
-
-		const auto height = image.height ();
-		const auto width = image.width ();
-		for (int y = 0; y < height; ++y)
+		ListUrls_ = StaticCommand
 		{
-			const auto scanline = reinterpret_cast<QRgb*> (image.scanLine (y));
-			for (int x = 0; x < width; ++x)
-			{
-				auto& color = scanline [x];
-				sourceGraySumR += qRed (color);
-				sourceGraySumG += qGreen (color);
-				sourceGraySumB += qBlue (color);
+			"/urls",
+			[this] (ICLEntry *e, const QString& t) { return ListUrls (AzothProxy_, e, t); }
+		};
+	}
 
-				color &= 0x00ffffff;
-				color = uint32_t { 0xffffffff } - color;
-			}
-		}
+	QByteArray Plugin::GetUniqueID () const
+	{
+		return "org.LeechCraft.Azoth.MuCommands";
+	}
 
-		const auto sourceGraySum = (sourceGraySumR * 11 + sourceGraySumG * 16 + sourceGraySumB * 5) / (width * height * 32);
+	void Plugin::Release ()
+	{
+	}
 
-		if (sourceGraySum >= static_cast<uint64_t> (Threshold_))
-			painter->drawImage (offset, image);
-		else
-			painter->drawPixmap (offset, sourcePx);
+	QString Plugin::GetName () const
+	{
+		return "Azoth MuCommands";
+	}
+
+	QString Plugin::GetInfo () const
+	{
+		return tr ("Provides some common commands, both for conferences and for private chats, for Azoth.");
+	}
+
+	QIcon Plugin::GetIcon () const
+	{
+		return {};
+	}
+
+	QSet<QByteArray> Plugin::GetPluginClasses () const
+	{
+		QSet<QByteArray> result;
+		result << "org.LeechCraft.Plugins.Azoth.Plugins.IGeneralPlugin";
+		return result;
+	}
+
+	StaticCommands_t Plugin::GetStaticCommands (ICLEntry *entry)
+	{
+		if (entry->GetEntryType () != ICLEntry::ETMUC)
+			return {};
+
+		return { Names_, ListUrls_ };
+	}
+
+	void Plugin::initPlugin (QObject *proxy)
+	{
+		AzothProxy_ = qobject_cast<IProxyObject*> (proxy);
 	}
 }
 }
 }
+
+LC_EXPORT_PLUGIN (leechcraft_azoth_mucommands, LeechCraft::Azoth::MuCommands::Plugin);

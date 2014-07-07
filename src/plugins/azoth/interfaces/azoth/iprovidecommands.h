@@ -27,74 +27,37 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#include "inverteffect.h"
-#include <QPainter>
-#include <QtDebug>
-#include <qwebview.h>
+#pragma once
+
+#include <functional>
+#include <QString>
+#include <QList>
+#include <QtPlugin>
 
 namespace LeechCraft
 {
-namespace Poshuku
+namespace Azoth
 {
-namespace DCAC
-{
-	InvertEffect::InvertEffect (QWebView *view)
-	: QGraphicsEffect { view }
+	class ICLEntry;
+
+	typedef std::function<bool (ICLEntry*, const QString&)> Command_f;
+
+	struct StaticCommand
 	{
-	}
+		QString Name_;
+		Command_f Command_;
+	};
 
-	void InvertEffect::SetThreshold (int threshold)
+	typedef QList<StaticCommand> StaticCommands_t;
+
+	class IProvideCommands
 	{
-		if (threshold == Threshold_)
-			return;
+	public:
+		virtual ~IProvideCommands () {}
 
-		Threshold_ = threshold;
-		update ();
-	}
-
-	void InvertEffect::draw (QPainter *painter)
-	{
-		QPoint offset;
-
-		const auto& sourcePx = sourcePixmap (Qt::LogicalCoordinates, &offset, QGraphicsEffect::NoPad);
-		auto image = sourcePx.toImage ();
-		switch (image.format ())
-		{
-		case QImage::Format_ARGB32:
-		case QImage::Format_ARGB32_Premultiplied:
-			break;
-		default:
-			image = image.convertToFormat (QImage::Format_ARGB32);
-			break;
-		}
-		image.detach ();
-
-		uint64_t sourceGraySumR = 0, sourceGraySumG = 0, sourceGraySumB = 0;
-
-		const auto height = image.height ();
-		const auto width = image.width ();
-		for (int y = 0; y < height; ++y)
-		{
-			const auto scanline = reinterpret_cast<QRgb*> (image.scanLine (y));
-			for (int x = 0; x < width; ++x)
-			{
-				auto& color = scanline [x];
-				sourceGraySumR += qRed (color);
-				sourceGraySumG += qGreen (color);
-				sourceGraySumB += qBlue (color);
-
-				color &= 0x00ffffff;
-				color = uint32_t { 0xffffffff } - color;
-			}
-		}
-
-		const auto sourceGraySum = (sourceGraySumR * 11 + sourceGraySumG * 16 + sourceGraySumB * 5) / (width * height * 32);
-
-		if (sourceGraySum >= static_cast<uint64_t> (Threshold_))
-			painter->drawImage (offset, image);
-		else
-			painter->drawPixmap (offset, sourcePx);
-	}
+		virtual StaticCommands_t GetStaticCommands (ICLEntry*) = 0;
+	};
 }
 }
-}
+
+Q_DECLARE_INTERFACE (LeechCraft::Azoth::IProvideCommands, "org.LeechCraft.Azoth.IProvideCommands/1.0");

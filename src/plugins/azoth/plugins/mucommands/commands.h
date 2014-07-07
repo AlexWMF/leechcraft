@@ -27,74 +27,22 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#include "inverteffect.h"
-#include <QPainter>
-#include <QtDebug>
-#include <qwebview.h>
+#pragma once
+
+class QString;
 
 namespace LeechCraft
 {
-namespace Poshuku
+namespace Azoth
 {
-namespace DCAC
+class IProxyObject;
+class ICLEntry;
+
+namespace MuCommands
 {
-	InvertEffect::InvertEffect (QWebView *view)
-	: QGraphicsEffect { view }
-	{
-	}
+	bool HandleNames (IProxyObject*, ICLEntry*, const QString&);
 
-	void InvertEffect::SetThreshold (int threshold)
-	{
-		if (threshold == Threshold_)
-			return;
-
-		Threshold_ = threshold;
-		update ();
-	}
-
-	void InvertEffect::draw (QPainter *painter)
-	{
-		QPoint offset;
-
-		const auto& sourcePx = sourcePixmap (Qt::LogicalCoordinates, &offset, QGraphicsEffect::NoPad);
-		auto image = sourcePx.toImage ();
-		switch (image.format ())
-		{
-		case QImage::Format_ARGB32:
-		case QImage::Format_ARGB32_Premultiplied:
-			break;
-		default:
-			image = image.convertToFormat (QImage::Format_ARGB32);
-			break;
-		}
-		image.detach ();
-
-		uint64_t sourceGraySumR = 0, sourceGraySumG = 0, sourceGraySumB = 0;
-
-		const auto height = image.height ();
-		const auto width = image.width ();
-		for (int y = 0; y < height; ++y)
-		{
-			const auto scanline = reinterpret_cast<QRgb*> (image.scanLine (y));
-			for (int x = 0; x < width; ++x)
-			{
-				auto& color = scanline [x];
-				sourceGraySumR += qRed (color);
-				sourceGraySumG += qGreen (color);
-				sourceGraySumB += qBlue (color);
-
-				color &= 0x00ffffff;
-				color = uint32_t { 0xffffffff } - color;
-			}
-		}
-
-		const auto sourceGraySum = (sourceGraySumR * 11 + sourceGraySumG * 16 + sourceGraySumB * 5) / (width * height * 32);
-
-		if (sourceGraySum >= static_cast<uint64_t> (Threshold_))
-			painter->drawImage (offset, image);
-		else
-			painter->drawPixmap (offset, sourcePx);
-	}
+	bool ListUrls (IProxyObject*, ICLEntry*, const QString&);
 }
 }
 }
