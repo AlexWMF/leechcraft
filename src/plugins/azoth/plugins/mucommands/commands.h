@@ -29,6 +29,9 @@
 
 #pragma once
 
+#include <interfaces/core/icoreproxy.h>
+#include <interfaces/structures.h>
+
 class QString;
 
 namespace LeechCraft
@@ -43,6 +46,10 @@ namespace MuCommands
 	bool HandleNames (IProxyObject*, ICLEntry*, const QString&);
 
 	bool ListUrls (IProxyObject*, ICLEntry*, const QString&);
+
+	bool OpenUrl (const ICoreProxy_ptr&, IProxyObject*, ICLEntry*, const QString&, TaskParameters);
+
+	bool ShowVCard (IProxyObject*, ICLEntry*, const QString&);
 }
 }
 }

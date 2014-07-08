@@ -28,11 +28,19 @@
  **********************************************************************/
 
 #include "commands.h"
+#include <boost/range/adaptor/reversed.hpp>
 #include <QStringList>
 #include <QtDebug>
+#include <QUrl>
+#include <util/util.h>
+#include <util/xpc/util.h>
 #include <interfaces/azoth/iclentry.h>
 #include <interfaces/azoth/imucentry.h>
 #include <interfaces/azoth/iproxyobject.h>
+#include <interfaces/azoth/iaccount.h>
+#include <interfaces/azoth/isupportnonroster.h>
+#include <interfaces/azoth/imetainfoentry.h>
+#include <interfaces/core/ientitymanager.h>
 
 namespace LeechCraft
 {
@@ -115,6 +123,197 @@ namespace MuCommands
 				QObject::tr ("Sorry, no links found, chat more!") :
 				QObject::tr ("Found links:") + "<ol><li>" + urls.join ("</li><li>") + "</li></ol>";
 		InjectMessage (azothProxy, entry, body);
+
+		return true;
+	}
+
+	bool OpenUrl (const ICoreProxy_ptr& coreProxy, IProxyObject *azothProxy,
+			ICLEntry *entry, const QString& text, TaskParameters params)
+	{
+		const auto& urls = GetAllUrls (azothProxy, entry);
+
+		const auto& split = text.split (' ', QString::SkipEmptyParts).mid (1);
+
+		QList<int> indexes;
+		if (split.isEmpty ())
+			indexes << urls.size () - 1;
+
+		for (const auto& item : split)
+		{
+			bool ok = false;
+			const auto idx = item.toInt (&ok);
+			if (ok)
+				indexes << idx - 1;
+		}
+
+		const auto iem = coreProxy->GetEntityManager ();
+		for (const auto idx : indexes)
+		{
+			const auto& url = urls.value (idx);
+			if (url.isEmpty ())
+				continue;
+
+			const auto& entity = Util::MakeEntity (QUrl::fromUserInput (url),
+					{}, params | FromUserInitiated);
+			iem->HandleEntity (entity);
+		}
+
+		return true;
+	}
+
+	namespace
+	{
+		QHash<QString, ICLEntry*> GetParticipants (IMUCEntry *entry)
+		{
+			QHash<QString, ICLEntry*> result;
+			for (const auto entryObj : entry->GetParticipants ())
+			{
+				const auto entry = qobject_cast<ICLEntry*> (entryObj);
+				if (entry)
+					result [entry->GetEntryName ()] = entry;
+			}
+			return result;
+		}
+
+		QStringList ParseNicks (ICLEntry *entry, const QString& text)
+		{
+			auto split = text.split (' ', QString::SkipEmptyParts).mid (1);
+
+			if (!split.isEmpty ())
+				return split;
+
+			const auto& msgs = entry->GetAllMessages ();
+			for (const auto msgObj : boost::adaptors::reverse (msgs))
+			{
+				const auto msg = qobject_cast<IMessage*> (msgObj);
+				if (const auto otherPart = qobject_cast<ICLEntry*> (msg->OtherPart ()))
+				{
+					split << otherPart->GetEntryName ();
+					break;
+				}
+			}
+
+			return split;
+		}
+
+		ICLEntry* ResolveEntry (const QString& name, const QHash<QString, ICLEntry*>& context, QObject *accObj)
+		{
+			if (context.contains (name))
+				return context.value (name);
+
+			const auto acc = qobject_cast<IAccount*> (accObj);
+			for (const auto entryObj : acc->GetCLEntries ())
+			{
+				const auto entry = qobject_cast<ICLEntry*> (entryObj);
+				if (!entry)
+					continue;
+
+				if (entry->GetEntryName () == name || entry->GetHumanReadableID () == name)
+					return entry;
+			}
+
+			if (const auto isn = qobject_cast<ISupportNonRoster*> (accObj))
+				if (const auto entry = qobject_cast<ICLEntry*> (isn->CreateNonRosterItem (name)))
+					return entry;
+
+			return nullptr;
+		}
+
+		QString FormatRepresentation (const QList<QPair<QString, QVariant>>& repr)
+		{
+			QStringList strings;
+
+			for (const auto& pair : repr)
+			{
+				if (pair.second.isNull ())
+					continue;
+
+				auto string = "<strong>" + pair.first + ":</strong> ";
+
+				switch (pair.second.type ())
+				{
+				case QVariant::String:
+				{
+					const auto& metaStr = pair.second.toString ();
+					if (metaStr.isEmpty ())
+						continue;
+
+					string += metaStr;
+					break;
+				}
+				case QVariant::Image:
+				{
+					const auto& image = pair.second.value<QImage> ();
+					if (image.isNull ())
+						continue;
+
+					const auto& src = Util::GetAsBase64Src (image);
+					string += "<img src='" + src + "' alt=''/>";
+					break;
+				}
+				case QVariant::Date:
+				{
+					const auto& date = pair.second.toDate ();
+					if (date.isNull ())
+						continue;
+
+					string += date.toString (Qt::DefaultLocaleLongDate);
+					break;
+				}
+				case QVariant::StringList:
+				{
+					const auto& list = pair.second.toStringList ();
+					if (list.isEmpty ())
+						continue;
+
+					string += "<ul><li>" + list.join ("</li><li>") + "</li></ul>";
+					break;
+				}
+				default:
+					string += "unhandled data type ";
+					string += pair.second.typeName ();
+					break;
+				}
+
+				strings << string;
+			}
+
+			if (strings.isEmpty ())
+				return QObject::tr ("no information");
+
+			return "<ul><li>" + strings.join ("</li><li>") + "</li></ul>";
+		}
+	}
+
+	bool ShowVCard (IProxyObject *azothProxy, ICLEntry *entry, const QString& text)
+	{
+		const auto& split = ParseNicks (entry, text);
+		if (split.isEmpty ())
+			return true;
+
+		const auto& participants = GetParticipants (qobject_cast<IMUCEntry*> (entry->GetQObject ()));
+		for (const auto& name : split)
+		{
+			const auto target = ResolveEntry (name.trimmed (),
+					participants, entry->GetParentAccount ());
+			if (!target)
+			{
+				InjectMessage (azothProxy, entry,
+						QObject::tr ("Unable to resolve %1.").arg ("<em>" + name + "</em>"));
+				continue;
+			}
+
+			const auto imie = qobject_cast<IMetaInfoEntry*> (target->GetQObject ());
+			if (!imie)
+			{
+				InjectMessage (azothProxy, entry,
+						QObject::tr ("%1 doesn't support extended metainformation.").arg ("<em>" + name + "</em>"));
+				continue;
+			}
+
+			InjectMessage (azothProxy, entry,
+					name + ":<br/>" + FormatRepresentation (imie->GetVCardRepresentation ()));
+		}
 
 		return true;
 	}
