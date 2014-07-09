@@ -400,12 +400,6 @@ namespace Azoth
 		 */
 		virtual QImage GetAvatar () const = 0;
 
-		/** @brief Return string with raw information about the entry.
-		 *
-		 * @return Human-readable string with information about the entry.
-		 */
-		virtual QString GetRawInfo () const = 0;
-
 		/** @brief Requests the entry to show dialog with info about it.
 		 */
 		virtual void ShowInfo () = 0;
@@ -541,13 +535,6 @@ namespace Azoth
 		 * @note This function is expected to be a signal in subclasses.
 		 */
 		virtual void avatarChanged (const QImage&) = 0;
-
-		/** @brief This signal should be emitted whenever our copy of
-		 * raw information is updated.
-		 *
-		 * @note This function is expected to be a signal in subclesses.
-		 */
-		virtual void rawinfoChanged (const QString&) = 0;
 
 		/** @brief This signal should be emitted whenever the entry
 		 * changes name.

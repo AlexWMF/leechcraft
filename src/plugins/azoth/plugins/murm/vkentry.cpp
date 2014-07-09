@@ -111,6 +111,8 @@ namespace Murm
 				Store (msg);
 			}
 		}
+
+		emit vcardUpdated ();
 	}
 
 	const UserInfo& VkEntry::GetInfo () const
@@ -466,11 +468,6 @@ namespace Murm
 	QImage VkEntry::GetAvatar () const
 	{
 		return Avatar_;
-	}
-
-	QString VkEntry::GetRawInfo () const
-	{
-		return {};
 	}
 
 	void VkEntry::ShowInfo ()

@@ -70,7 +70,6 @@ namespace Acetamide
 		EntryStatus GetStatus (const QString&) const;
 		QList<QAction*> GetActions () const;
 		QImage GetAvatar () const;
-		QString GetRawInfo () const;
 		void ShowInfo ();
 		QMap<QString, QVariant> GetClientInfo (const QString&) const;
 
@@ -90,7 +89,6 @@ namespace Acetamide
 		void gotMessage (QObject*);
 		void statusChanged (const EntryStatus&, const QString&);
 		void avatarChanged (const QImage&);
-		void rawinfoChanged (const QString&);
 		void availableVariantsChanged (const QStringList&);
 		void nameChanged (const QString&);
 		void groupsChanged (const QStringList&);

@@ -97,7 +97,6 @@ namespace Xoox
 		QMap<QString, GeolocationInfo_t> Location_;
 
 		QImage Avatar_;
-		QString RawInfo_;
 		QXmppVCardIq VCardIq_;
 		QPointer<VCardDialog> VCardDialog_;
 
@@ -130,7 +129,6 @@ namespace Xoox
 		EntryStatus GetStatus (const QString&) const;
 		virtual QList<QAction*> GetActions () const;
 		QImage GetAvatar () const;
-		QString GetRawInfo () const;
 		void ShowInfo ();
 		QMap<QString, QVariant> GetClientInfo (const QString&) const;
 		void MarkMsgsRead ();
@@ -166,7 +164,6 @@ namespace Xoox
 		void SetAvatar (const QImage&);
 		QXmppVCardIq GetVCard () const;
 		void SetVCard (const QXmppVCardIq&, bool initial = false);
-		void SetRawInfo (const QString&);
 
 		bool HasUnreadMsgs () const;
 		QList<GlooxMessage*> GetUnreadMessages () const;
@@ -182,7 +179,6 @@ namespace Xoox
 		QXmppVersionIq GetClientVersion (const QString&) const;
 	private:
 		void CheckVCardUpdate (const QXmppPresence&);
-		QString FormatRawInfo (const QXmppVCardIq&);
 		void SetNickFromVCard (const QXmppVCardIq&);
 	private slots:
 		void handleTimeReceived (const QXmppEntityTimeIq&);
@@ -193,7 +189,6 @@ namespace Xoox
 		void gotMessage (QObject*);
 		void statusChanged (const EntryStatus&, const QString&);
 		void avatarChanged (const QImage&);
-		void rawinfoChanged (const QString&);
 		void availableVariantsChanged (const QStringList&);
 		void nameChanged (const QString&);
 		void groupsChanged (const QStringList&);

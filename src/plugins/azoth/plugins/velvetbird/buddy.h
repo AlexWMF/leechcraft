@@ -78,7 +78,6 @@ namespace VelvetBird
 		void SetChatPartState (ChatPartState state, const QString& variant);
 		EntryStatus GetStatus (const QString& variant = QString ()) const;
 		QImage GetAvatar () const;
-		QString GetRawInfo () const;
 		void ShowInfo ();
 		QList<QAction*> GetActions () const;
 		QMap<QString, QVariant> GetClientInfo (const QString& variant) const;
@@ -97,7 +96,6 @@ namespace VelvetBird
 		void statusChanged (const EntryStatus&, const QString&);
 		void availableVariantsChanged (const QStringList&);
 		void avatarChanged (const QImage&);
-		void rawinfoChanged (const QString&);
 		void nameChanged (const QString&);
 		void groupsChanged (const QStringList&);
 		void chatPartStateChanged (const ChatPartState&, const QString&);

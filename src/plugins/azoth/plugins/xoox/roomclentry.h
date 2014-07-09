@@ -100,7 +100,6 @@ namespace Xoox
 		EntryStatus GetStatus (const QString&) const;
 		QList<QAction*> GetActions () const;
 		QImage GetAvatar () const;
-		QString GetRawInfo () const;
 		void ShowInfo ();
 		QMap<QString, QVariant> GetClientInfo (const QString&) const;
 		void MarkMsgsRead ();
@@ -152,7 +151,6 @@ namespace Xoox
 		void statusChanged (const EntryStatus&, const QString&);
 		void availableVariantsChanged (const QStringList&);
 		void avatarChanged (const QImage&);
-		void rawinfoChanged (const QString&);
 		void nameChanged (const QString&);
 		void groupsChanged (const QStringList&);
 		void chatPartStateChanged (const ChatPartState&, const QString&);

@@ -99,7 +99,6 @@ namespace Acetamide
 
 		EntryStatus GetStatus (const QString& variant = QString ()) const;
 		QImage GetAvatar () const;
-		QString GetRawInfo () const;
 		void ShowInfo ();
 
 		// IMUCEntry
@@ -167,7 +166,6 @@ namespace Acetamide
 		void statusChanged (const EntryStatus&, const QString&);
 		void availableVariantsChanged (const QStringList&);
 		void avatarChanged (const QImage&);
-		void rawinfoChanged (const QString&);
 		void nameChanged (const QString&);
 		void groupsChanged (const QStringList&);
 		void chatPartStateChanged (const ChatPartState&, const QString&);
