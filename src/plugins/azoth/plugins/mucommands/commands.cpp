@@ -35,12 +35,16 @@
 #include <util/util.h>
 #include <util/xpc/util.h>
 #include <util/sll/slotclosure.h>
+#include <util/sll/delayedexecutor.h>
 #include <interfaces/azoth/iclentry.h>
 #include <interfaces/azoth/imucentry.h>
 #include <interfaces/azoth/iproxyobject.h>
 #include <interfaces/azoth/iaccount.h>
 #include <interfaces/azoth/isupportnonroster.h>
 #include <interfaces/azoth/imetainfoentry.h>
+#include <interfaces/azoth/ihaveentitytime.h>
+#include <interfaces/azoth/iprotocol.h>
+#include <interfaces/azoth/imucjoinwidget.h>
 #include <interfaces/core/ientitymanager.h>
 
 namespace LeechCraft
@@ -112,6 +116,9 @@ namespace MuCommands
 
 				urls += azothProxy->FindLinks (msg->GetBody ());
 			}
+
+			urls.removeDuplicates ();
+
 			return urls;
 		}
 	}
@@ -138,6 +145,9 @@ namespace MuCommands
 		QList<int> indexes;
 		if (split.isEmpty ())
 			indexes << urls.size () - 1;
+		else if (split.size () == 1 && split.at (0) == "*")
+			for (int i = 0; i < urls.size (); ++i)
+				indexes << i;
 
 		for (const auto& item : split)
 		{
@@ -178,7 +188,9 @@ namespace MuCommands
 
 		QStringList ParseNicks (ICLEntry *entry, const QString& text)
 		{
-			auto split = text.split ('\n', QString::SkipEmptyParts).mid (1);
+			auto split = text
+					.section (' ', 1)
+					.split ('\n', QString::SkipEmptyParts);
 
 			if (!split.isEmpty ())
 				return split;
@@ -284,53 +296,244 @@ namespace MuCommands
 
 			return "<ul><li>" + strings.join ("</li><li>") + "</li></ul>";
 		}
+
+		template<typename T>
+		void PerformMucAction (T action, IProxyObject *azothProxy, ICLEntry *entry, const QString& text)
+		{
+			const auto& split = ParseNicks (entry, text);
+			if (split.isEmpty ())
+				return;
+
+			const auto& participants = GetParticipants (qobject_cast<IMUCEntry*> (entry->GetQObject ()));
+			for (const auto& name : split)
+			{
+				const auto target = ResolveEntry (name.trimmed (),
+						participants, entry->GetParentAccount ());
+				if (!target)
+				{
+					InjectMessage (azothProxy, entry,
+							QObject::tr ("Unable to resolve %1.").arg ("<em>" + name + "</em>"));
+					continue;
+				}
+
+				action (target, name);
+			}
+		}
 	}
 
 	bool ShowVCard (IProxyObject *azothProxy, ICLEntry *entry, const QString& text)
 	{
-		const auto& split = ParseNicks (entry, text);
-		if (split.isEmpty ())
-			return true;
-
-		const auto& participants = GetParticipants (qobject_cast<IMUCEntry*> (entry->GetQObject ()));
-		for (const auto& name : split)
-		{
-			const auto target = ResolveEntry (name.trimmed (),
-					participants, entry->GetParentAccount ());
-			if (!target)
-			{
-				InjectMessage (azothProxy, entry,
-						QObject::tr ("Unable to resolve %1.").arg ("<em>" + name + "</em>"));
-				continue;
-			}
-
-			const auto targetObj = target->GetQObject ();
-			const auto imie = qobject_cast<IMetaInfoEntry*> (targetObj);
-			if (!imie)
-			{
-				InjectMessage (azothProxy, entry,
-						QObject::tr ("%1 doesn't support extended metainformation.").arg ("<em>" + name + "</em>"));
-				continue;
-			}
-
-			const auto& repr = FormatRepresentation (imie->GetVCardRepresentation ());
-			if (repr.isEmpty ())
-			{
-				InjectMessage (azothProxy, entry,
-						name + ": " + QObject::tr ("no information, would wait for next vcard update..."));
-
-				new Util::SlotClosure<Util::DeleteLaterPolicy>
+		PerformMucAction ([azothProxy, entry, text] (ICLEntry *target, const QString& name) -> void
 				{
-					[azothProxy, entry, text] { ShowVCard (azothProxy, entry, text); },
-					targetObj,
-					SIGNAL (vcardUpdated ()),
-					targetObj
-				};
-			}
-			else
-				InjectMessage (azothProxy, entry, name + ":<br/>" + repr);
-		}
+					const auto targetObj = target->GetQObject ();
+					const auto imie = qobject_cast<IMetaInfoEntry*> (targetObj);
+					if (!imie)
+					{
+						InjectMessage (azothProxy, entry,
+								QObject::tr ("%1 doesn't support extended metainformation.").arg ("<em>" + name + "</em>"));
+						return;
+					}
 
+					const auto& repr = FormatRepresentation (imie->GetVCardRepresentation ());
+					if (repr.isEmpty ())
+					{
+						InjectMessage (azothProxy, entry,
+								name + ": " + QObject::tr ("no information, would wait for next vcard update..."));
+
+						new Util::SlotClosure<Util::DeleteLaterPolicy>
+						{
+							[azothProxy, entry, text] { ShowVCard (azothProxy, entry, text); },
+							targetObj,
+							SIGNAL (vcardUpdated ()),
+							targetObj
+						};
+					}
+					else
+						InjectMessage (azothProxy, entry, name + ":<br/>" + repr);
+				},
+				azothProxy, entry, text);
+
+		return true;
+	}
+
+	bool ShowVersion (IProxyObject *azothProxy, ICLEntry *entry, const QString& text)
+	{
+		PerformMucAction ([azothProxy, entry] (ICLEntry *target, const QString& name) -> void
+				{
+					const auto& variants = target->Variants ();
+					for (const auto& var : variants)
+					{
+						const auto& info = target->GetClientInfo (var);
+
+						QStringList fields;
+						auto add = [&fields] (const QString& name, const QString& value)
+						{
+							if (!value.isEmpty ())
+								fields << "<strong>" + name + ":</strong> " + value;
+						};
+
+						add (QObject::tr ("Type"), info ["client_type"].toString ());
+						add (QObject::tr ("Name"), info ["client_name"].toString ());
+						add (QObject::tr ("Version"), info ["client_version"].toString ());
+						add (QObject::tr ("OS"), info ["client_os"].toString ());
+
+						auto body = QObject::tr ("Client information for %1:")
+								.arg (var.isEmpty () && variants.size () == 1 ?
+										name :
+										target->GetHumanReadableID () + '/' + var);
+						body += fields.isEmpty () ?
+								QObject::tr ("no information available.") :
+								"<ul><li>" + fields.join ("</li><li>") + "</li></ul>";
+
+						InjectMessage (azothProxy, entry, body);
+					}
+				},
+				azothProxy, entry, text);
+
+		return true;
+	}
+
+	bool ShowTime (IProxyObject *azothProxy, ICLEntry *entry, const QString& text)
+	{
+		PerformMucAction ([azothProxy, entry, text] (ICLEntry *target, const QString& name) -> void
+				{
+					const auto targetObj = target->GetQObject ();
+					const auto ihet = qobject_cast<IHaveEntityTime*> (targetObj);
+					if (!ihet)
+					{
+						InjectMessage (azothProxy, entry,
+								QObject::tr ("%1 does not support querying time.")
+										.arg (name));
+						return;
+					}
+
+					bool shouldUpdate = false;
+
+					QStringList fields;
+
+					const auto& variants = target->Variants ();
+					for (const auto& var : variants)
+					{
+						const auto time = target->GetClientInfo (var)
+								.value ("client_time").toDateTime ();
+						const auto& varName = var.isEmpty () ?
+								name :
+								target->GetHumanReadableID () + '/' + var;
+						if (!time.isValid ())
+						{
+							fields << QObject::tr ("No information for %1.")
+									.arg (varName);
+							shouldUpdate = true;
+							continue;
+						}
+
+						fields << QObject::tr ("Current time for %1: %2.")
+								.arg (varName)
+								.arg (QLocale {}.toString (time));
+					}
+
+					if (shouldUpdate)
+					{
+						ihet->UpdateEntityTime ();
+
+						new Util::SlotClosure<Util::DeleteLaterPolicy>
+						{
+							[azothProxy, entry, text] { ShowTime (azothProxy, entry, text); },
+							targetObj,
+							SIGNAL (entityTimeUpdated ()),
+							targetObj
+						};
+					}
+
+					if (fields.isEmpty ())
+						return;
+
+					const auto& body = "<ul><li>" + fields.join ("</li><li>") + "</li></ul>";
+					InjectMessage (azothProxy, entry,
+							QObject::tr ("Entity time for %1:").arg (name) + body);
+				},
+				azothProxy, entry, text);
+
+		return true;
+	}
+
+	bool RejoinMuc (IProxyObject*, ICLEntry *entry, const QString& text)
+	{
+		const auto accObj = entry->GetParentAccount ();
+		const auto entryObj = entry->GetQObject ();
+		const auto mucEntry = qobject_cast<IMUCEntry*> (entryObj);
+		if (!mucEntry)
+			return false;
+
+		const auto& mucData = mucEntry->GetIdentifyingData ();
+
+		new Util::SlotClosure<Util::NoDeletePolicy>
+		{
+			[entryObj, accObj, mucData] () -> void
+			{
+				const auto acc = qobject_cast<IAccount*> (accObj);
+				if (acc->GetCLEntries ().contains (entryObj))
+					return;
+
+				new Util::DelayedExecutor
+				{
+					[acc, mucData] ()
+					{
+						const auto proto = qobject_cast<IProtocol*> (acc->GetParentProtocol ());
+						std::unique_ptr<QWidget> jw { proto->GetMUCJoinWidget () };
+
+						const auto imjw = qobject_cast<IMUCJoinWidget*> (jw.get ());
+						imjw->SetIdentifyingData (mucData);
+						imjw->Join (acc->GetQObject ());
+					},
+					1000
+				};
+			},
+			accObj,
+			SIGNAL (removedCLItems (QList<QObject*>)),
+			entryObj
+		};
+
+		mucEntry->Leave (text.section (' ', 1));
+
+		return true;
+	}
+
+	bool LeaveMuc (IProxyObject*, ICLEntry *entry, const QString& text)
+	{
+		const auto mucEntry = qobject_cast<IMUCEntry*> (entry->GetQObject ());
+		if (!mucEntry)
+			return false;
+
+		mucEntry->Leave (text.section (' ', 1));
+		return true;
+	}
+
+	bool ChangeSubject (IProxyObject *azothProxy, ICLEntry *entry, const QString& text)
+	{
+		const auto mucEntry = qobject_cast<IMUCEntry*> (entry->GetQObject ());
+		if (!mucEntry)
+			return false;
+
+		const auto& newSubject = text.section (' ', 1);
+		if (newSubject.trimmed ().isEmpty ())
+			InjectMessage (azothProxy, entry, mucEntry->GetMUCSubject ());
+		else
+			mucEntry->SetMUCSubject (newSubject);
+		return true;
+	}
+
+	bool ChangeNick (IProxyObject*, ICLEntry *entry, const QString& text)
+	{
+		const auto mucEntry = qobject_cast<IMUCEntry*> (entry->GetQObject ());
+		if (!mucEntry)
+			return false;
+
+		const auto& newNick = text.section (' ', 1);
+		if (newNick.isEmpty ())
+			return false;
+
+		mucEntry->SetNick (newNick);
 		return true;
 	}
 }

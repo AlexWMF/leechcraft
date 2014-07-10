@@ -209,7 +209,7 @@ namespace Xoox
 			res ["client_time"] = now.addSecs (Variant2SecsDiff_.value (var).Diff_);
 		}
 
-		auto version = Variant2Version_ [var];
+		const auto& version = Variant2Version_ [var];
 		if (version.name ().isEmpty ())
 			return res;
 
@@ -913,12 +913,15 @@ namespace Xoox
 		QString variant;
 		ClientConnection::Split (from, &bare, &variant);
 
-		if (variant.isEmpty ())
+		if (variant.isEmpty () || GetEntryType () == ETPrivateChat)
 			variant = "";
 
 		const auto& secsDiff = QDateTime::currentDateTimeUtc ().secsTo (thatTime);
 		Variant2SecsDiff_ [variant] = { secsDiff, iq.tzo () };
+
 		emit entryGenerallyChanged ();
+
+		emit entityTimeUpdated ();
 	}
 
 	void EntryBase::handleCommands ()

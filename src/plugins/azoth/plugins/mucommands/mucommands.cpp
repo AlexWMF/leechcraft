@@ -77,6 +77,44 @@ namespace MuCommands
 			"/vcard",
 			[this] (ICLEntry *e, const QString& t) { return ShowVCard (AzothProxy_, e, t); }
 		};
+
+		Version_ = StaticCommand
+		{
+			"/version",
+			[this] (ICLEntry *e, const QString& t) { return ShowVersion (AzothProxy_, e, t); }
+		};
+
+		Time_ = StaticCommand
+		{
+			"/time",
+			[this] (ICLEntry *e, const QString& t) { return ShowTime (AzothProxy_, e, t); }
+		};
+
+		ChangeNick_ = StaticCommand
+		{
+			"/nick",
+			[this] (ICLEntry *e, const QString& t) { return ChangeNick (AzothProxy_, e, t); }
+		};
+
+		ChangeSubject_ = StaticCommand
+		{
+			"/subject",
+			[this] (ICLEntry *e, const QString& t) { return ChangeSubject (AzothProxy_, e, t); }
+		};
+
+		LeaveMuc_ = StaticCommand
+		{
+			"/leave",
+			[this] (ICLEntry *e, const QString& t) { return LeaveMuc (AzothProxy_, e, t); }
+		};
+		PartMuc_ = LeaveMuc_;
+		PartMuc_.Name_ = "/part";
+
+		RejoinMuc_ = StaticCommand
+		{
+			"/rejoin",
+			[this] (ICLEntry *e, const QString& t) { return RejoinMuc (AzothProxy_, e, t); }
+		};
 	}
 
 	QByteArray Plugin::GetUniqueID () const
@@ -115,7 +153,11 @@ namespace MuCommands
 		if (entry->GetEntryType () != ICLEntry::ETMUC)
 			return {};
 
-		return { Names_, ListUrls_, OpenUrl_, FetchUrl_, VCard_ };
+		return
+		{
+			Names_, ListUrls_, OpenUrl_, FetchUrl_, VCard_, Version_, Time_,
+			ChangeNick_, ChangeSubject_, LeaveMuc_, PartMuc_, RejoinMuc_
+		};
 	}
 
 	void Plugin::initPlugin (QObject *proxy)

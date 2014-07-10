@@ -553,7 +553,7 @@ namespace Xoox
 
 	void RoomHandler::Leave (const QString& msg, bool remove)
 	{
-		Q_FOREACH (RoomParticipantEntry_ptr entry, Nick2Entry_.values ())
+		for (const auto& entry : Nick2Entry_)
 			Account_->handleEntryRemoved (entry.get ());
 
 		Room_->leave (msg);
@@ -807,8 +807,8 @@ namespace Xoox
 
 	void RoomHandler::RemoveThis ()
 	{
-		Account_->handleEntryRemoved (CLEntry_);
 		Account_->GetClientConnection ()->Unregister (this);
+		Account_->handleEntryRemoved (CLEntry_);
 		Room_->deleteLater ();
 		Room_ = 0;
 		deleteLater ();

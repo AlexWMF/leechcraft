@@ -59,6 +59,13 @@ namespace MuCommands
 		StaticCommand OpenUrl_;
 		StaticCommand FetchUrl_;
 		StaticCommand VCard_;
+		StaticCommand Version_;
+		StaticCommand Time_;
+		StaticCommand ChangeNick_;
+		StaticCommand ChangeSubject_;
+		StaticCommand LeaveMuc_;
+		StaticCommand PartMuc_;
+		StaticCommand RejoinMuc_;
 
 		ICoreProxy_ptr CoreProxy_;
 		IProxyObject *AzothProxy_ = nullptr;

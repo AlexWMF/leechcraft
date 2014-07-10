@@ -50,6 +50,18 @@ namespace MuCommands
 	bool OpenUrl (const ICoreProxy_ptr&, IProxyObject*, ICLEntry*, const QString&, TaskParameters);
 
 	bool ShowVCard (IProxyObject*, ICLEntry*, const QString&);
+
+	bool ShowVersion (IProxyObject*, ICLEntry*, const QString&);
+
+	bool ShowTime (IProxyObject*, ICLEntry*, const QString&);
+
+	bool RejoinMuc (IProxyObject*, ICLEntry*, const QString&);
+
+	bool LeaveMuc (IProxyObject*, ICLEntry*, const QString&);
+
+	bool ChangeSubject (IProxyObject*, ICLEntry*, const QString&);
+
+	bool ChangeNick (IProxyObject*, ICLEntry*, const QString&);
 }
 }
 }

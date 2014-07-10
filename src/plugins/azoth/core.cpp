@@ -2066,9 +2066,9 @@ namespace Azoth
 
 	void Core::handleRemovedCLItems (const QList<QObject*>& items)
 	{
-		Q_FOREACH (QObject *clitem, items)
+		for (const auto clitem : items)
 		{
-			ICLEntry *entry = qobject_cast<ICLEntry*> (clitem);
+			const auto entry = qobject_cast<ICLEntry*> (clitem);
 			if (!entry)
 			{
 				qWarning () << Q_FUNC_INFO
@@ -2076,6 +2076,10 @@ namespace Azoth
 						<< "is not a valid ICLEntry";
 				continue;
 			}
+
+			if (entry->GetEntryType () == ICLEntry::ETMUC &&
+					XmlSettingsManager::Instance ().property ("CloseConfOnLeave").toBool ())
+				GetChatTabsManager ()->CloseChat (entry);
 
 			disconnect (clitem,
 					0,
