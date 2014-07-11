@@ -29,45 +29,25 @@
 
 #pragma once
 
-#include <interfaces/core/icoreproxy.h>
-#include <interfaces/structures.h>
-
-class QString;
+#include <QObject>
+#include <interfaces/azoth/iprovidecommands.h>
 
 namespace LeechCraft
 {
 namespace Azoth
 {
-class IProxyObject;
-class ICLEntry;
+	class CoreCommandsManager : public QObject
+							  , public IProvideCommands
+	{
+		Q_OBJECT
+		Q_INTERFACES (LeechCraft::Azoth::IProvideCommands)
 
-namespace MuCommands
-{
-	bool HandleNames (IProxyObject*, ICLEntry*, const QString&);
+		const StaticCommand Help_;
+		const StaticCommand Clear_;
+	public:
+		CoreCommandsManager (QObject *parent = nullptr);
 
-	bool ListUrls (IProxyObject*, ICLEntry*, const QString&);
-
-	bool OpenUrl (const ICoreProxy_ptr&, IProxyObject*, ICLEntry*, const QString&, TaskParameters);
-
-	bool ShowVCard (IProxyObject*, ICLEntry*, const QString&);
-
-	bool ShowVersion (IProxyObject*, ICLEntry*, const QString&);
-
-	bool ShowTime (IProxyObject*, ICLEntry*, const QString&);
-
-	bool RejoinMuc (IProxyObject*, ICLEntry*, const QString&);
-
-	bool LeaveMuc (IProxyObject*, ICLEntry*, const QString&);
-
-	bool ChangeSubject (IProxyObject*, ICLEntry*, const QString&);
-
-	bool ChangeNick (IProxyObject*, ICLEntry*, const QString&);
-
-	bool Kick (IProxyObject*, ICLEntry*, const QString&);
-
-	bool Ban (IProxyObject*, ICLEntry*, const QString&);
-
-	bool Ping (IProxyObject*, ICLEntry*, const QString&);
-}
+		StaticCommands_t GetStaticCommands (ICLEntry*);
+	};
 }
 }

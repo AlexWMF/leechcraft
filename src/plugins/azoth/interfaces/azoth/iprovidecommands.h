@@ -30,8 +30,7 @@
 #pragma once
 
 #include <functional>
-#include <QString>
-#include <QList>
+#include <QStringList>
 #include <QtPlugin>
 
 namespace LeechCraft
@@ -44,8 +43,29 @@ namespace Azoth
 
 	struct StaticCommand
 	{
-		QString Name_;
+		QStringList Names_;
 		Command_f Command_;
+
+		QString Description_;
+		QString Help_;
+
+		StaticCommand () = default;
+		StaticCommand (const StaticCommand&) = default;
+
+		StaticCommand (const QStringList& names, const Command_f& command)
+		: Names_ { names }
+		, Command_ { command }
+		{
+		}
+
+		StaticCommand (const QStringList& names, const Command_f& command,
+				const QString& descr, const QString& help)
+		: Names_ { names }
+		, Command_ { command }
+		, Description_ { descr }
+		, Help_ { help }
+		{
+		}
 	};
 
 	typedef QList<StaticCommand> StaticCommands_t;

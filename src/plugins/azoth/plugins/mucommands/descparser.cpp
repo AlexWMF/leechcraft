@@ -27,47 +27,64 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#pragma once
-
-#include <interfaces/core/icoreproxy.h>
-#include <interfaces/structures.h>
-
-class QString;
+#include "descparser.h"
+#include <QFile>
+#include <QDomDocument>
+#include <QtDebug>
+#include <interfaces/azoth/iprovidecommands.h>
 
 namespace LeechCraft
 {
 namespace Azoth
 {
-class IProxyObject;
-class ICLEntry;
-
 namespace MuCommands
 {
-	bool HandleNames (IProxyObject*, ICLEntry*, const QString&);
+	DescParser::DescParser ()
+	{
+		QFile file { ":/azoth/mucommands/resources/data/descriptions.xml" };
+		if (!file.open (QIODevice::ReadOnly))
+		{
+			qWarning () << Q_FUNC_INFO
+					<< "unable to open descriptions file"
+					<< file.errorString ();
+			return;
+		}
 
-	bool ListUrls (IProxyObject*, ICLEntry*, const QString&);
+		QDomDocument doc;
+		QString msg;
+		int line = 0;
+		int column = 0;
+		if (!doc.setContent (&file, &msg, &line, &column))
+		{
+			qWarning () << Q_FUNC_INFO
+					<< "cannot parse descriptions file"
+					<< msg
+					<< line
+					<< column;
+			return;
+		}
 
-	bool OpenUrl (const ICoreProxy_ptr&, IProxyObject*, ICLEntry*, const QString&, TaskParameters);
+		auto cmdElem = doc.documentElement ().firstChildElement ("command");
+		while (!cmdElem.isNull ())
+		{
+			const auto& name = cmdElem.attribute ("name");
 
-	bool ShowVCard (IProxyObject*, ICLEntry*, const QString&);
+			const auto& descr = cmdElem.firstChildElement ("desc").text ();
+			auto help = cmdElem.firstChildElement ("help").text ();
+			help.replace ("\n\n", "<br/><br/>");
 
-	bool ShowVersion (IProxyObject*, ICLEntry*, const QString&);
+			Cmd2Desc_ [name] = Desc { descr, help };
 
-	bool ShowTime (IProxyObject*, ICLEntry*, const QString&);
+			cmdElem = cmdElem.nextSiblingElement ("command");
+		}
+	}
 
-	bool RejoinMuc (IProxyObject*, ICLEntry*, const QString&);
-
-	bool LeaveMuc (IProxyObject*, ICLEntry*, const QString&);
-
-	bool ChangeSubject (IProxyObject*, ICLEntry*, const QString&);
-
-	bool ChangeNick (IProxyObject*, ICLEntry*, const QString&);
-
-	bool Kick (IProxyObject*, ICLEntry*, const QString&);
-
-	bool Ban (IProxyObject*, ICLEntry*, const QString&);
-
-	bool Ping (IProxyObject*, ICLEntry*, const QString&);
+	void DescParser::operator() (StaticCommand& cmd) const
+	{
+		const auto& desc = Cmd2Desc_.value (cmd.Names_.first ());
+		cmd.Description_ = desc.Description_;
+		cmd.Help_ = desc.Help_;
+	}
 }
 }
 }

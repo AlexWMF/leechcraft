@@ -29,45 +29,33 @@
 
 #pragma once
 
-#include <interfaces/core/icoreproxy.h>
-#include <interfaces/structures.h>
-
-class QString;
+#include <QtPlugin>
 
 namespace LeechCraft
 {
 namespace Azoth
 {
-class IProxyObject;
-class ICLEntry;
+	class IPendingPing
+	{
+	public:
+		virtual ~IPendingPing () {}
 
-namespace MuCommands
-{
-	bool HandleNames (IProxyObject*, ICLEntry*, const QString&);
+		virtual int GetTimeout () const = 0;
+	protected:
+		virtual void replyReceived (int timeout) = 0;
+	};
 
-	bool ListUrls (IProxyObject*, ICLEntry*, const QString&);
+	class IHavePings
+	{
+	public:
+		virtual ~IHavePings () {}
 
-	bool OpenUrl (const ICoreProxy_ptr&, IProxyObject*, ICLEntry*, const QString&, TaskParameters);
-
-	bool ShowVCard (IProxyObject*, ICLEntry*, const QString&);
-
-	bool ShowVersion (IProxyObject*, ICLEntry*, const QString&);
-
-	bool ShowTime (IProxyObject*, ICLEntry*, const QString&);
-
-	bool RejoinMuc (IProxyObject*, ICLEntry*, const QString&);
-
-	bool LeaveMuc (IProxyObject*, ICLEntry*, const QString&);
-
-	bool ChangeSubject (IProxyObject*, ICLEntry*, const QString&);
-
-	bool ChangeNick (IProxyObject*, ICLEntry*, const QString&);
-
-	bool Kick (IProxyObject*, ICLEntry*, const QString&);
-
-	bool Ban (IProxyObject*, ICLEntry*, const QString&);
-
-	bool Ping (IProxyObject*, ICLEntry*, const QString&);
+		virtual QObject* Ping (const QString& variant) = 0;
+	};
 }
 }
-}
+
+Q_DECLARE_INTERFACE (LeechCraft::Azoth::IPendingPing,
+		"org.LeechCraft.Azoth.IPendingPing/1.0");
+Q_DECLARE_INTERFACE (LeechCraft::Azoth::IHavePings,
+		"org.LeechCraft.Azoth.IHavePings/1.0");

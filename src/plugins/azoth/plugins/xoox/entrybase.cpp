@@ -69,6 +69,8 @@
 #include "capsdatabase.h"
 #include "avatarsstorage.h"
 #include "inforequestpolicymanager.h"
+#include "pingmanager.h"
+#include "pingreplyobject.h"
 
 namespace LeechCraft
 {
@@ -205,8 +207,13 @@ namespace Xoox
 
 		if (Variant2SecsDiff_.contains (var))
 		{
-			const auto& now = QDateTime::currentDateTime ();
-			res ["client_time"] = now.addSecs (Variant2SecsDiff_.value (var).Diff_);
+			auto now = QDateTime::currentDateTimeUtc ();
+			now.setTimeSpec (Qt::LocalTime);
+			const auto& secsDiff = Variant2SecsDiff_.value (var);
+			res ["client_time"] = now
+					.addSecs (secsDiff.Diff_)
+					.addSecs (secsDiff.Tzo_);
+			res ["client_tzo"] = secsDiff.Tzo_;
 		}
 
 		const auto& version = Variant2Version_ [var];
@@ -430,6 +437,18 @@ namespace Xoox
 		for (const auto& variant : Variants ())
 			if (!variant.isEmpty ())
 				timeMgr->requestTime (jid + '/' + variant);
+	}
+
+	QObject* EntryBase::Ping (const QString& variant)
+	{
+		auto jid = GetJID ();
+		if (!variant.isEmpty ())
+			jid += '/' + variant;
+
+		auto reply = new PingReplyObject { this };
+		Account_->GetClientConnection ()->GetPingManager ()->Ping (jid,
+				[reply] (int msecs) { reply->HandleReply (msecs); });
+		return reply;
 	}
 
 	void EntryBase::HandlePresence (const QXmppPresence& pres, const QString& resource)
@@ -786,6 +805,7 @@ namespace Xoox
 
 	void EntryBase::SetClientVersion (const QString& variant, const QXmppVersionIq& version)
 	{
+		qDebug () << Q_FUNC_INFO << variant << version.os ();
 		Variant2Version_ [variant] = version;
 
 		emit entryGenerallyChanged ();
@@ -916,7 +936,7 @@ namespace Xoox
 		if (variant.isEmpty () || GetEntryType () == ETPrivateChat)
 			variant = "";
 
-		const auto& secsDiff = QDateTime::currentDateTimeUtc ().secsTo (thatTime);
+		const auto secsDiff = QDateTime::currentDateTimeUtc ().secsTo (thatTime);
 		Variant2SecsDiff_ [variant] = { secsDiff, iq.tzo () };
 
 		emit entryGenerallyChanged ();

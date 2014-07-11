@@ -27,47 +27,41 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#pragma once
-
-#include <interfaces/core/icoreproxy.h>
-#include <interfaces/structures.h>
-
-class QString;
+#include "pingmanager.h"
+#include <QElapsedTimer>
+#include <QDomElement>
+#include <QXmppClient.h>
+#include <QXmppPingIq.h>
 
 namespace LeechCraft
 {
 namespace Azoth
 {
-class IProxyObject;
-class ICLEntry;
-
-namespace MuCommands
+namespace Xoox
 {
-	bool HandleNames (IProxyObject*, ICLEntry*, const QString&);
+	bool PingManager::handleStanza (const QDomElement& elem)
+	{
+		const auto& id = elem.attribute ("id");
+		if (!Stanza2Info_.contains (id) ||
+				elem.attribute ("type") != "result")
+			return false;
 
-	bool ListUrls (IProxyObject*, ICLEntry*, const QString&);
+		const auto& info = Stanza2Info_.take (id);
+		info.Handler_ (info.Timer_->elapsed ());
 
-	bool OpenUrl (const ICoreProxy_ptr&, IProxyObject*, ICLEntry*, const QString&, TaskParameters);
+		return false;
+	}
 
-	bool ShowVCard (IProxyObject*, ICLEntry*, const QString&);
+	void PingManager::Ping (const QString& jid, const PingManager::ReplyHandler_f& cb)
+	{
+		QXmppPingIq iq;
+		iq.setTo (jid);
+		client ()->sendPacket (iq);
 
-	bool ShowVersion (IProxyObject*, ICLEntry*, const QString&);
-
-	bool ShowTime (IProxyObject*, ICLEntry*, const QString&);
-
-	bool RejoinMuc (IProxyObject*, ICLEntry*, const QString&);
-
-	bool LeaveMuc (IProxyObject*, ICLEntry*, const QString&);
-
-	bool ChangeSubject (IProxyObject*, ICLEntry*, const QString&);
-
-	bool ChangeNick (IProxyObject*, ICLEntry*, const QString&);
-
-	bool Kick (IProxyObject*, ICLEntry*, const QString&);
-
-	bool Ban (IProxyObject*, ICLEntry*, const QString&);
-
-	bool Ping (IProxyObject*, ICLEntry*, const QString&);
+		const auto& timer = std::make_shared<QElapsedTimer> ();
+		timer->start ();
+		Stanza2Info_ [iq.id ()] = PingInfo { timer, cb };
+	}
 }
 }
 }

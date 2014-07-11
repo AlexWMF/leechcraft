@@ -29,45 +29,31 @@
 
 #pragma once
 
-#include <interfaces/core/icoreproxy.h>
-#include <interfaces/structures.h>
-
-class QString;
+#include <QMap>
+#include <QString>
 
 namespace LeechCraft
 {
 namespace Azoth
 {
-class IProxyObject;
-class ICLEntry;
+struct StaticCommand;
 
 namespace MuCommands
 {
-	bool HandleNames (IProxyObject*, ICLEntry*, const QString&);
+	class DescParser
+	{
+		struct Desc
+		{
+			QString Description_;
+			QString Help_;
+		};
 
-	bool ListUrls (IProxyObject*, ICLEntry*, const QString&);
+		QMap<QString, Desc> Cmd2Desc_;
+	public:
+		DescParser ();
 
-	bool OpenUrl (const ICoreProxy_ptr&, IProxyObject*, ICLEntry*, const QString&, TaskParameters);
-
-	bool ShowVCard (IProxyObject*, ICLEntry*, const QString&);
-
-	bool ShowVersion (IProxyObject*, ICLEntry*, const QString&);
-
-	bool ShowTime (IProxyObject*, ICLEntry*, const QString&);
-
-	bool RejoinMuc (IProxyObject*, ICLEntry*, const QString&);
-
-	bool LeaveMuc (IProxyObject*, ICLEntry*, const QString&);
-
-	bool ChangeSubject (IProxyObject*, ICLEntry*, const QString&);
-
-	bool ChangeNick (IProxyObject*, ICLEntry*, const QString&);
-
-	bool Kick (IProxyObject*, ICLEntry*, const QString&);
-
-	bool Ban (IProxyObject*, ICLEntry*, const QString&);
-
-	bool Ping (IProxyObject*, ICLEntry*, const QString&);
+		void operator() (StaticCommand&) const;
+	};
 }
 }
 }

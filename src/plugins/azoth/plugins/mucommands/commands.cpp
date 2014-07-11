@@ -45,6 +45,8 @@
 #include <interfaces/azoth/ihaveentitytime.h>
 #include <interfaces/azoth/iprotocol.h>
 #include <interfaces/azoth/imucjoinwidget.h>
+#include <interfaces/azoth/ihavepings.h>
+#include <interfaces/azoth/imucperms.h>
 #include <interfaces/core/ientitymanager.h>
 
 namespace LeechCraft
@@ -393,6 +395,18 @@ namespace MuCommands
 		return true;
 	}
 
+	namespace
+	{
+		QString FormatTzo (int tzo)
+		{
+			const auto& time = QTime { 0, 0 }.addSecs (std::abs (tzo));
+
+			auto str = time.toString ("HH:mm");
+			str.prepend (tzo >= 0 ? '+' : '-');
+			return str;
+		}
+	}
+
 	bool ShowTime (IProxyObject *azothProxy, ICLEntry *entry, const QString& text)
 	{
 		PerformMucAction ([azothProxy, entry, text] (ICLEntry *target, const QString& name) -> void
@@ -427,9 +441,25 @@ namespace MuCommands
 							continue;
 						}
 
-						fields << QObject::tr ("Current time for %1: %2.")
-								.arg (varName)
+						const auto tzo = target->GetClientInfo (var)
+								.value ("client_tzo").toInt ();
+
+						QString field = QObject::tr ("Current time for %1:")
+								.arg (varName);
+						field += "<ul><li>";
+						field += QObject::tr ("Local time: %1")
 								.arg (QLocale {}.toString (time));
+						field += "</li><li>";
+						field += QObject::tr ("Timezone: %1")
+								.arg (FormatTzo (tzo));
+						field += "</li><li>";
+
+						const auto& utcTime = time.addSecs (-tzo);
+						field += QObject::tr ("UTC time: %1")
+								.arg (QLocale {}.toString (utcTime));
+
+						field += "</li></ul>";
+						fields << field;
 					}
 
 					if (shouldUpdate)
@@ -534,6 +564,91 @@ namespace MuCommands
 			return false;
 
 		mucEntry->SetNick (newNick);
+		return true;
+	}
+
+	namespace
+	{
+		void PerformRoleAction (const QPair<QByteArray, QByteArray>& role,
+				QObject *mucEntryObj, QString str)
+		{
+			if (role.first.isEmpty () && role.second.isEmpty ())
+				return;
+
+			str = str.trimmed ();
+			const int pos = str.lastIndexOf ('|');
+			const auto& nick = pos > 0 ? str.left (pos) : str;
+			const auto& reason = pos > 0 ? str.mid (pos + 1) : QString ();
+
+			auto mucEntry = qobject_cast<IMUCEntry*> (mucEntryObj);
+			auto mucPerms = qobject_cast<IMUCPerms*> (mucEntryObj);
+
+			const auto& parts = mucEntry->GetParticipants ();
+			auto partPos = std::find_if (parts.begin (), parts.end (),
+					[&nick] (QObject *entryObj) -> bool
+					{
+						auto entry = qobject_cast<ICLEntry*> (entryObj);
+						return entry && entry->GetEntryName () == nick;
+					});
+			if (partPos == parts.end ())
+				return;
+
+			mucPerms->SetPerm (*partPos, role.first, role.second, reason);
+		}
+	}
+
+	bool Kick (IProxyObject*, ICLEntry *entry, const QString& text)
+	{
+		const auto mucPerms = qobject_cast<IMUCPerms*> (entry->GetQObject ());
+		if (!mucPerms)
+			return false;
+
+		PerformRoleAction (mucPerms->GetKickPerm (), entry->GetQObject (), text.section (' ', 1));
+		return true;
+	}
+
+	bool Ban (IProxyObject*, ICLEntry *entry, const QString& text)
+	{
+		const auto mucPerms = qobject_cast<IMUCPerms*> (entry->GetQObject ());
+		if (!mucPerms)
+			return false;
+
+		PerformRoleAction (mucPerms->GetBanPerm (), entry->GetQObject (), text.section (' ', 1));
+		return true;
+	}
+
+	bool Ping (IProxyObject *azothProxy, ICLEntry *entry, const QString& text)
+	{
+		PerformMucAction ([azothProxy, entry] (ICLEntry *target, const QString& name) -> void
+				{
+					const auto targetObj = target->GetQObject ();
+					const auto ihp = qobject_cast<IHavePings*> (targetObj);
+					if (!ihp)
+					{
+						InjectMessage (azothProxy, entry,
+								QObject::tr ("%1 does not support pinging.").arg (name));
+						return;
+					}
+
+					const auto reply = ihp->Ping ({});
+					new Util::SlotClosure<Util::DeleteLaterPolicy>
+					{
+						[reply, azothProxy, entry, name] ()
+						{
+							const auto ipp = qobject_cast<IPendingPing*> (reply);
+
+							InjectMessage (azothProxy, entry,
+									QObject::tr ("Pong from %1: %2 ms.")
+											.arg (name)
+											.arg (ipp->GetTimeout ()));
+						},
+						reply,
+						SIGNAL (replyReceived (int)),
+						reply
+					};
+				},
+				azothProxy, entry, text);
+
 		return true;
 	}
 }
