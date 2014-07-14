@@ -52,7 +52,7 @@ namespace Azoth
 				{
 					auto cmdLine = cmd.Names_.join ("; ");
 					if (!cmd.Description_.isEmpty ())
-						cmdLine += " &mdash; " + cmd.Description_;
+						cmdLine += QString::fromUtf8 (" — ") + cmd.Description_;
 					commands << cmdLine;
 				}
 
@@ -62,7 +62,8 @@ namespace Azoth
 					.arg ("<code>/help command</code>");
 
 			const auto entryObj = entry->GetQObject ();
-			const auto msgObj = ProxyObject {}.CreateCoreMessage (body,
+			const auto msgObj = ProxyObject {}.CreateCoreMessage ({},
+					body,
 					QDateTime::currentDateTime (),
 					IMessage::MTServiceMessage,
 					IMessage::DIn,
@@ -88,7 +89,8 @@ namespace Azoth
 				message += "<br/>" + cmd.Help_;
 
 			const auto entryObj = entry->GetQObject ();
-			const auto msgObj = ProxyObject {}.CreateCoreMessage (message,
+			const auto msgObj = ProxyObject {}.CreateCoreMessage ({},
+					message,
 					QDateTime::currentDateTime (),
 					IMessage::MTServiceMessage,
 					IMessage::DIn,
@@ -117,7 +119,8 @@ namespace Azoth
 					.arg ("<code>" + name + "</code>");
 
 			const auto entryObj = entry->GetQObject ();
-			const auto msgObj = ProxyObject {}.CreateCoreMessage (body,
+			const auto msgObj = ProxyObject {}.CreateCoreMessage ({},
+					body,
 					QDateTime::currentDateTime (),
 					IMessage::MTServiceMessage,
 					IMessage::DIn,

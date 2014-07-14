@@ -48,6 +48,7 @@
 #include <util/xpc/defaulthookproxy.h>
 #include <util/xpc/notificationactionhandler.h>
 #include <util/shortcuts/shortcutmanager.h>
+#include <util/sys/resourceloader.h>
 #include <interfaces/iplugin2.h>
 #include <interfaces/an/constants.h>
 #include <interfaces/core/icoreproxy.h>
@@ -66,7 +67,7 @@
 #include "interfaces/azoth/ihaveservicediscovery.h"
 #include "interfaces/azoth/iextselfinfoaccount.h"
 #ifdef ENABLE_CRYPT
-#include "interfaces/azoth/isupportpgp.h"
+#include "cryptomanager.h"
 #endif
 #include "chattabsmanager.h"
 #include "pluginmanager.h"
@@ -92,8 +93,8 @@
 #include "customchatstylemanager.h"
 #include "cltooltipmanager.h"
 #include "corecommandsmanager.h"
+#include "resourcesmanager.h"
 
-Q_DECLARE_METATYPE (QList<QColor>);
 Q_DECLARE_METATYPE (QPointer<QObject>);
 
 namespace LeechCraft
@@ -199,11 +200,6 @@ namespace Azoth
 
 	Core::Core ()
 	: Proxy_ (nullptr)
-#ifdef ENABLE_CRYPT
-	, QCAInit_ (new QCA::Initializer)
-	, KeyStoreMgr_ (new QCA::KeyStoreManager)
-	, QCAEventHandler_ (new QCA::EventHandler)
-#endif
 	, TooltipManager_ (new CLTooltipManager (Entry2Items_))
 	, CLModel_ (new CLModel (TooltipManager_, this))
 	, ChatTabsManager_ (new ChatTabsManager (this))
@@ -223,42 +219,6 @@ namespace Azoth
 	, CustomChatStyleManager_ (new CustomChatStyleManager)
 	{
 		FillANFields ();
-
-#ifdef ENABLE_CRYPT
-		connect (QCAEventHandler_.get (),
-				SIGNAL (eventReady (int, const QCA::Event&)),
-				this,
-				SLOT (handleQCAEvent (int, const QCA::Event&)));
-		if (KeyStoreMgr_->isBusy ())
-			connect (KeyStoreMgr_.get (),
-					SIGNAL (busyFinished ()),
-					this,
-					SLOT (handleQCABusyFinished ()),
-					Qt::QueuedConnection);
-		QCAEventHandler_->start ();
-		KeyStoreMgr_->start ();
-
-		QSettings settings (QCoreApplication::organizationName (),
-				QCoreApplication::applicationName () + "_Azoth");
-		settings.beginGroup ("PublicEntryKeys");
-		Q_FOREACH (const QString& entryId, settings.childKeys ())
-			StoredPublicKeys_ [entryId] = settings.value (entryId).toString ();
-		settings.endGroup ();
-#endif
-		ResourceLoaders_ [RLTStatusIconLoader].reset (new Util::ResourceLoader ("azoth/iconsets/contactlist/", this));
-		ResourceLoaders_ [RLTClientIconLoader].reset (new Util::ResourceLoader ("azoth/iconsets/clients/", this));
-		ResourceLoaders_ [RLTAffIconLoader].reset (new Util::ResourceLoader ("azoth/iconsets/affiliations/", this));
-		ResourceLoaders_ [RLTSystemIconLoader].reset (new Util::ResourceLoader ("azoth/iconsets/system/", this));
-		ResourceLoaders_ [RLTActivityIconLoader].reset (new Util::ResourceLoader ("azoth/iconsets/activities/", this));
-		ResourceLoaders_ [RLTMoodIconLoader].reset (new Util::ResourceLoader ("azoth/iconsets/moods/", this));
-
-		for (auto rl : ResourceLoaders_.values ())
-		{
-			rl->AddLocalPrefix ();
-			rl->AddGlobalPrefix ();
-
-			rl->SetCacheParams (1000, 0);
-		}
 
 		connect (this,
 				SIGNAL (hookAddingCLEntryEnd (LeechCraft::IHookProxy_ptr, QObject*)),
@@ -312,14 +272,11 @@ namespace Azoth
 
 	void Core::Release ()
 	{
-		ResourceLoaders_.clear ();
 		ShortcutManager_.reset ();
 		StyleOptionManagers_.clear ();
 
 #ifdef ENABLE_CRYPT
-		QCAEventHandler_.reset ();
-		KeyStoreMgr_.reset ();
-		QCAInit_.reset ();
+		CryptoManager::Instance ().Release ();
 #endif
 	}
 
@@ -350,11 +307,6 @@ namespace Azoth
 	QList<ANFieldData> Core::GetANFields () const
 	{
 		return ANFields_;
-	}
-
-	Util::ResourceLoader* Core::GetResourceLoader (Core::ResourceLoaderType type) const
-	{
-		return ResourceLoaders_ [type].get ();
 	}
 
 	QAbstractItemModel* Core::GetSmilesOptionsModel () const
@@ -631,52 +583,6 @@ namespace Azoth
 		return 0;
 	}
 
-#ifdef ENABLE_CRYPT
-	QList<QCA::PGPKey> Core::GetPublicKeys () const
-	{
-		QList<QCA::PGPKey> result;
-
-		QCA::KeyStore store ("qca-gnupg", KeyStoreMgr_.get ());
-
-		Q_FOREACH (const QCA::KeyStoreEntry& entry, store.entryList ())
-		{
-			const QCA::PGPKey& key = entry.pgpPublicKey ();
-			if (!key.isNull ())
-				result << key;
-		}
-
-		return result;
-	}
-
-	QList<QCA::PGPKey> Core::GetPrivateKeys () const
-	{
-		QList<QCA::PGPKey> result;
-
-		QCA::KeyStore store ("qca-gnupg", KeyStoreMgr_.get ());
-
-		Q_FOREACH (const QCA::KeyStoreEntry& entry, store.entryList ())
-		{
-			const QCA::PGPKey& key = entry.pgpSecretKey ();
-			if (!key.isNull ())
-				result << key;
-		}
-
-		return result;
-	}
-
-	void Core::AssociatePrivateKey (IAccount *acc, const QCA::PGPKey& key) const
-	{
-		QSettings settings (QCoreApplication::organizationName (),
-				QCoreApplication::applicationName () + "_Azoth");
-		settings.beginGroup ("PrivateKeys");
-		if (key.isNull ())
-			settings.remove (acc->GetAccountID ());
-		else
-			settings.setValue (acc->GetAccountID (), key.keyId ());
-		settings.endGroup ();
-	}
-#endif
-
 	QStringList Core::GetChatGroups () const
 	{
 		QStringList result;
@@ -868,78 +774,6 @@ namespace Azoth
 		src->FrameFocused (frame);
 	}
 
-	QList<QColor> Core::GenerateColors (const QString& coloring, QColor bg) const
-	{
-		auto compatibleColors = [] (const QColor& c1, const QColor& c2) -> bool
-		{
-			int dR = c1.red () - c2.red ();
-			int dG = c1.green () - c2.green ();
-			int dB = c1.blue () - c2.blue ();
-
-			double dV = std::abs (c1.value () - c2.value ());
-			double dC = std::sqrt (0.2126 * dR * dR + 0.7152 * dG * dG + 0.0722 * dB * dB);
-
-			if ((dC < 80. && dV > 100.) ||
-					(dC < 110. && dV <= 100. && dV > 10.) ||
-					(dC < 125. && dV <= 10.))
-				return false;
-
-			return true;
-		};
-
-		QList<QColor> result;
-		if (XmlSettingsManager::Instance ().property ("OverrideHashColors").toBool ())
-		{
-			result = XmlSettingsManager::Instance ()
-					.property ("OverrideColorsList").value<decltype (result)> ();
-			if (!result.isEmpty ())
-				return result;
-		}
-
-		if (coloring == "hash" || coloring.isEmpty ())
-		{
-			if (!bg.isValid ())
-				bg = QApplication::palette ().color (QPalette::Base);
-
-			int alpha = bg.alpha ();
-
-			QColor color;
-			for (int hue = 0; hue < 360; hue += 18)
-			{
-				color.setHsv (hue, 255, 255, alpha);
-				if (compatibleColors (color, bg))
-					result << color;
-				color.setHsv (hue, 255, 170, alpha);
-				if (compatibleColors (color, bg))
-					result << color;
-			}
-		}
-		else
-			for (const auto& str : coloring.split (' ', QString::SkipEmptyParts))
-				result << QColor (str);
-
-		return result;
-	}
-
-	QString Core::GetNickColor (const QString& nick, const QList<QColor>& colors) const
-	{
-		if (colors.isEmpty ())
-			return "green";
-
-		int hash = 0;
-		for (int i = 0; i < nick.length (); ++i)
-		{
-			const QChar& c = nick.at (i);
-			hash += c.toLatin1 () ?
-					c.toLatin1 () :
-					c.unicode ();
-			hash += nick.length ();
-		}
-		hash = std::abs (hash);
-		const auto& nc = colors.at (hash % colors.size ());
-		return nc.name ();
-	}
-
 	QString Core::FormatDate (QDateTime dt, IMessage *msg)
 	{
 		Util::DefaultHookProxy_ptr proxy (new Util::DefaultHookProxy);
@@ -1117,6 +951,8 @@ namespace Azoth
 		if (proxy->IsCancelled ())
 			return;
 
+		ResourcesManager::Instance ().HandleEntry (clEntry);
+
 		connect (clEntry->GetQObject (),
 				SIGNAL (statusChanged (EntryStatus, QString)),
 				this,
@@ -1125,10 +961,6 @@ namespace Azoth
 				SIGNAL (availableVariantsChanged (QStringList)),
 				this,
 				SLOT (handleVariantsChanged ()));
-		connect (clEntry->GetQObject (),
-				SIGNAL (availableVariantsChanged (const QStringList&)),
-				this,
-				SLOT (invalidateClientsIconCache ()));
 		connect (clEntry->GetQObject (),
 				SIGNAL (gotMessage (QObject*)),
 				this,
@@ -1173,8 +1005,7 @@ namespace Azoth
 					SLOT (handleAttentionDrawn (const QString&, const QString&)));
 
 #ifdef ENABLE_CRYPT
-		if (!KeyStoreMgr_->isBusy ())
-			RestoreKeyForEntry (clEntry);
+		CryptoManager::Instance ().AddEntry (clEntry);
 #endif
 
 		EventsNotifier_->RegisterEntry (clEntry);
@@ -1318,10 +1149,8 @@ namespace Azoth
 		emit hookEntryStatusChanged (Util::DefaultHookProxy_ptr (new Util::DefaultHookProxy),
 				entry->GetQObject (), variant);
 
-		invalidateClientsIconCache (entry);
-
 		const State state = entry->GetStatus ().State_;
-		Util::QIODevice_ptr icon = GetIconPathForState (state);
+		const auto& icon = ResourcesManager::Instance ().GetIconPathForState (state);
 
 		for (auto item : Entry2Items_.value (entry))
 		{
@@ -1361,7 +1190,9 @@ namespace Azoth
 
 		const QString& filename = XmlSettingsManager::Instance ()
 				.property ("StatusIcons").toString () + "/file";
-		Util::QIODevice_ptr fileIcon = ResourceLoaders_ [RLTStatusIconLoader]->GetIconDevice (filename, true);
+		const auto& fileIcon = ResourcesManager::Instance ()
+				.GetResourceLoader (ResourcesManager::RLTStatusIconLoader)->
+						GetIconDevice (filename, true);
 		for (auto item : Entry2Items_.value (entry))
 			ItemIconManager_->SetIcon (item, fileIcon.get ());
 	}
@@ -1384,101 +1215,6 @@ namespace Azoth
 				0;
 	}
 
-	namespace
-	{
-		QString GetStateIconFilename (State state)
-		{
-			QString iconName;
-			switch (state)
-			{
-			case SOnline:
-				iconName = "online";
-				break;
-			case SChat:
-				iconName = "chatty";
-				break;
-			case SAway:
-				iconName = "away";
-				break;
-			case SDND:
-				iconName = "dnd";
-				break;
-			case SXA:
-				iconName = "xa";
-				break;
-			case SOffline:
-				iconName = "offline";
-				break;
-			case SConnecting:
-				iconName = "connect";
-				break;
-			default:
-				iconName = "perr";
-				break;
-			}
-
-			QString filename = XmlSettingsManager::Instance ()
-					.property ("StatusIcons").toString ();
-			filename += '/';
-			filename += iconName;
-
-			return filename;
-		}
-	}
-
-	Util::QIODevice_ptr Core::GetIconPathForState (State state) const
-	{
-		const QString& filename = GetStateIconFilename (state);
-		return ResourceLoaders_ [RLTStatusIconLoader]->GetIconDevice (filename, true);
-	}
-
-	QIcon Core::GetIconForState (State state) const
-	{
-		const QString& filename = GetStateIconFilename (state);
-		return ResourceLoaders_ [RLTStatusIconLoader]->LoadPixmap (filename);
-	}
-
-	QIcon Core::GetAffIcon (const QByteArray& affName) const
-	{
-		QString filename = XmlSettingsManager::Instance ()
-				.property ("AffIcons").toString ();
-		filename += '/';
-		filename += affName;
-
-		return QIcon (ResourceLoaders_ [RLTAffIconLoader]->LoadPixmap (filename));
-	}
-
-	QMap<QString, QIcon> Core::GetClientIconForEntry (ICLEntry *entry)
-	{
-		if (EntryClientIconCache_.contains (entry))
-			return EntryClientIconCache_ [entry];
-
-		QMap<QString, QIcon> result;
-
-		const QString& pack = XmlSettingsManager::Instance ()
-					.property ("ClientIcons").toString () + '/';
-		Q_FOREACH (const QString& variant, entry->Variants ())
-		{
-			const auto& type = entry->GetClientInfo (variant) ["client_type"].toString ();
-			if (type.isNull ())
-			{
-				result [variant] = QIcon ();
-				continue;
-			}
-
-			const QString& filename = pack + type;
-
-			QPixmap pixmap = ResourceLoaders_ [RLTClientIconLoader]->LoadPixmap (filename);
-			if (pixmap.isNull ())
-				pixmap = ResourceLoaders_ [RLTClientIconLoader]->LoadPixmap (pack + "unknown");
-
-			result [variant] = QIcon (pixmap);
-		}
-
-		EntryClientIconCache_ [entry] = result;
-		return result;
-	}
-
 	QImage Core::GetAvatar (ICLEntry *entry, int size)
 	{
 		if (Entry2SmoothAvatarCache_.contains (entry) &&
@@ -1488,7 +1224,7 @@ namespace Azoth
 
 		QImage avatar = entry ? entry->GetAvatar () : QImage ();
 		if (avatar.isNull () || !avatar.width ())
-			avatar = GetDefaultAvatar (size);
+			avatar = ResourcesManager::Instance ().GetDefaultAvatar (size);
 
 		const QImage& scaled = avatar.isNull () ?
 				QImage () :
@@ -1496,18 +1232,6 @@ namespace Azoth
 						Qt::KeepAspectRatio, Qt::SmoothTransformation);
 		Entry2SmoothAvatarCache_ [entry] = scaled;
 		return scaled;
-	}
-
-	QImage Core::GetDefaultAvatar (int size) const
-	{
-		const QString& name = XmlSettingsManager::Instance ()
-				.property ("SystemIcons").toString () + "/default_avatar";
-		const QImage& image = ResourceLoaders_ [RLTSystemIconLoader]->
-				LoadPixmap (name).toImage ();
-		return image.isNull () ?
-				QImage () :
-				image.scaled (size, size,
-						Qt::KeepAspectRatio, Qt::SmoothTransformation);
 	}
 
 	ActionsManager* Core::GetActionsManager () const
@@ -1731,56 +1455,6 @@ namespace Azoth
 			emit topStatusChanged (newTop);
 	}
 
-#ifdef ENABLE_CRYPT
-	void Core::RestoreKeyForAccount (IAccount *acc)
-	{
-		ISupportPGP *pgp = qobject_cast<ISupportPGP*> (acc->GetQObject ());
-		if (!pgp)
-			return;
-
-		QSettings settings (QCoreApplication::organizationName (),
-			QCoreApplication::applicationName () + "_Azoth");
-		settings.beginGroup ("PrivateKeys");
-		const QString& keyId = settings.value (acc->GetAccountID ()).toString ();
-		settings.endGroup ();
-
-		if (keyId.isEmpty ())
-			return;
-
-		Q_FOREACH (const QCA::PGPKey& key, GetPrivateKeys ())
-			if (key.keyId () == keyId)
-			{
-				pgp->SetPrivateKey (key);
-				break;
-			}
-	}
-
-	void Core::RestoreKeyForEntry (ICLEntry *clEntry)
-	{
-		if (!StoredPublicKeys_.contains (clEntry->GetEntryID ()))
-			return;
-
-		ISupportPGP *pgp = qobject_cast<ISupportPGP*> (clEntry->GetParentAccount ());
-		if (!pgp)
-		{
-			qWarning () << Q_FUNC_INFO
-					<< clEntry->GetQObject ()
-					<< clEntry->GetParentAccount ()
-					<< "doesn't implement ISupportGPG though "
-						"we have the key";
-			return;
-		}
-
-		const QString& keyId = StoredPublicKeys_.take (clEntry->GetEntryID ());
-		Q_FOREACH (const QCA::PGPKey& key, GetPublicKeys ())
-			if (key.keyId () == keyId)
-			{
-				pgp->SetEntryKey (clEntry->GetQObject (), key);
-				break;
-			}
-	}
-#endif
-
 	void Core::handleMucJoinRequested ()
 	{
 		auto accounts = GetAccountsPred (ProtocolPlugins_,
@@ -1842,17 +1516,15 @@ namespace Azoth
 		emit accountAdded (account);
 
 #ifdef ENABLE_CRYPT
-		if (!KeyStoreMgr_->isBusy ())
-			RestoreKeyForAccount (account);
+		CryptoManager::Instance ().AddAccount (account);
 #endif
 
 		QStandardItem *accItem = new QStandardItem (account->GetAccountName ());
-		accItem->setData (QVariant::fromValue<QObject*> (accObject),
-				CLRAccountObject);
-		accItem->setData (QVariant::fromValue<CLEntryType> (CLETAccount),
-				CLREntryType);
+		accItem->setData (QVariant::fromValue<QObject*> (accObject), CLRAccountObject);
+		accItem->setData (QVariant::fromValue<CLEntryType> (CLETAccount), CLREntryType);
+		const auto accState = account->GetState ().State_;
 		ItemIconManager_->SetIcon (accItem,
-				GetIconPathForState (account->GetState ().State_).get ());
+				ResourcesManager::Instance ().GetIconPathForState (accState).get ());
 
 		{
 			ModelUpdateSafeguard guard (CLModel_);
@@ -2106,9 +1778,9 @@ namespace Azoth
 
 			ID2Entry_.remove (entry->GetEntryID ());
 
-			EntryClientIconCache_.remove (entry);
 			Entry2SmoothAvatarCache_.remove (entry);
-			invalidateClientsIconCache (clitem);
+
+			ResourcesManager::Instance ().HandleRemoved (entry);
 		}
 	}
 
@@ -2155,7 +1827,7 @@ namespace Azoth
 				continue;
 
 			ItemIconManager_->SetIcon (item,
-					GetIconPathForState (status.State_).get ());
+					ResourcesManager::Instance ().GetIconPathForState (status.State_).get ());
 			return;
 		}
 
@@ -2345,7 +2017,7 @@ namespace Azoth
 							.arg (other->GetEntryName ());
 				else
 				{
-					const QString& body = msg->GetBody ();
+					const QString& body = Qt::escape (msg->GetBody ());
 					const QString& notifMsg = body.size () > 50 ?
 							body.left (50) + "..." :
 							body;
@@ -2367,7 +2039,7 @@ namespace Azoth
 							.arg (other->GetEntryName ());
 				else
 				{
-					const QString& body = msg->GetBody ();
+					const QString& body = Qt::escape (msg->GetBody ());
 					const QString& notifMsg = body.size () > 50 ?
 							body.left (50) + "..." :
 							body;
@@ -2426,7 +2098,7 @@ namespace Azoth
 		e.Additional_ ["org.LC.AdvNotifications.Count"] = count;
 
 		e.Additional_ ["org.LC.AdvNotifications.ExtendedText"] = tr ("%n message(s)", 0, count);
-		e.Additional_ ["org.LC.Plugins.Azoth.Msg"] = msg->GetBody ();
+		e.Additional_ ["org.LC.Plugins.Azoth.Msg"] = Qt::escape (msg->GetBody ());
 
 		auto nh = new Util::NotificationActionHandler (e, this);
 		nh->AddFunction (tr ("Open chat"),
@@ -2769,16 +2441,16 @@ namespace Azoth
 
 	void Core::updateStatusIconset ()
 	{
-		QMap<State, Util::QIODevice_ptr> State2IconCache_;
-		Q_FOREACH (ICLEntry *entry, Entry2Items_.keys ())
+		QMap<State, Util::QIODevice_ptr> state2IconCache;
+		for (const auto entry : Entry2Items_.keys ())
 		{
-			State state = entry->GetStatus ().State_;
-			if (!State2IconCache_.contains (state))
-				State2IconCache_ [state] = GetIconPathForState (state);
+			const auto state = entry->GetStatus ().State_;
+			if (!state2IconCache.contains (state))
+				state2IconCache [state] = ResourcesManager::Instance ().GetIconPathForState (state);
 
 			for (auto item : Entry2Items_.value (entry))
 			{
-				Util::QIODevice_ptr dev = State2IconCache_ [state];
+				const auto& dev = state2IconCache [state];
 				ItemIconManager_->SetIcon (item, dev.get ());
 			}
 		}
@@ -2789,20 +2461,6 @@ namespace Azoth
 		Q_FOREACH (ICLEntry *entry, Entry2Items_.keys ())
 			if (entry->GetEntryType () == ICLEntry::ETChat)
 				handleEntryGroupsChanged (GetDisplayGroups (entry), entry->GetQObject ());
-	}
-
-	void Core::showVCard ()
-	{
-		ICLEntry *entry = qobject_cast<ICLEntry*> (sender ());
-		if (!entry)
-		{
-			qWarning () << Q_FUNC_INFO
-					<< "sender doesn't implement ICLEntry"
-					<< sender ();
-			return;
-		}
-
-		entry->ShowInfo ();
 	}
 
 	void Core::updateItem ()
@@ -2901,26 +2559,6 @@ namespace Azoth
 		RIEX::HandleRIEXItemsSuggested (items, from, message);
 	}
 
-	void Core::invalidateClientsIconCache (QObject *passedObj)
-	{
-		QObject *obj = passedObj ? passedObj : sender ();
-		ICLEntry *entry = qobject_cast<ICLEntry*> (obj);
-		if (!entry)
-		{
-			qWarning () << Q_FUNC_INFO
-					<< obj
-					<< "could not be casted to ICLEntry";
-			return;
-		}
-
-		invalidateClientsIconCache (entry);
-	}
-
-	void Core::invalidateClientsIconCache (ICLEntry *entry)
-	{
-		EntryClientIconCache_.remove (entry);
-	}
-
 	void Core::invalidateSmoothAvatarCache ()
 	{
 		ICLEntry *entry = qobject_cast<ICLEntry*> (sender ());
@@ -2935,40 +2573,5 @@ namespace Azoth
 		Entry2SmoothAvatarCache_.remove (entry);
 		updateItem ();
 	}
-
-	void Core::flushIconCaches ()
-	{
-		Q_FOREACH (std::shared_ptr<Util::ResourceLoader> rl, ResourceLoaders_.values ())
-			rl->FlushCache ();
-	}
-
-#ifdef ENABLE_CRYPT
-	void Core::handleQCAEvent (int id, const QCA::Event& event)
-	{
-		qDebug () << Q_FUNC_INFO << id << event.type ();
-	}
-
-	void Core::handleQCABusyFinished ()
-	{
-		Q_FOREACH (IAccount *acc, GetAccounts ())
-		{
-			RestoreKeyForAccount (acc);
-
-			Q_FOREACH (QObject *entryObj, acc->GetCLEntries ())
-			{
-				ICLEntry *entry = qobject_cast<ICLEntry*> (entryObj);
-				if (!entry)
-				{
-					qWarning () << Q_FUNC_INFO
-							<< entry
-							<< "doesn't implement ICLEntry";
-					continue;
-				}
-
-				RestoreKeyForEntry (entry);
-			}
-		}
-	}
-#endif
 }
 }

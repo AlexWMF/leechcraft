@@ -42,6 +42,7 @@
 #include <QXmppGlobal.h>
 #include <QXmppEntityTimeIq.h>
 #include <QXmppEntityTimeManager.h>
+#include <QXmppVersionManager.h>
 #include <util/util.h>
 #include <util/xpc/util.h>
 #include <interfaces/azoth/iproxyobject.h>
@@ -71,6 +72,8 @@
 #include "inforequestpolicymanager.h"
 #include "pingmanager.h"
 #include "pingreplyobject.h"
+#include "pendingversionquery.h"
+#include "discomanagerwrapper.h"
 
 namespace LeechCraft
 {
@@ -220,13 +223,13 @@ namespace Xoox
 		if (version.name ().isEmpty ())
 			return res;
 
-		QString str;
-		str = version.name ();
 		res ["client_remote_name"] = version.name ();
 		if (!version.version ().isEmpty ())
 			res ["client_version"] = version.version ();
 		if (!version.os ().isEmpty ())
 			res ["client_os"] = version.os ();
+		if (res ["client_name"].toString ().isEmpty ())
+			res ["client_name"] = version.name ();
 
 		return res;
 	}
@@ -449,6 +452,18 @@ namespace Xoox
 		Account_->GetClientConnection ()->GetPingManager ()->Ping (jid,
 				[reply] (int msecs) { reply->HandleReply (msecs); });
 		return reply;
+	}
+
+	QObject* EntryBase::QueryVersion (const QString& variant)
+	{
+		auto jid = GetJID ();
+		if (!variant.isEmpty ())
+			jid += '/' + variant;
+
+		const auto vm = Account_->GetClientConnection ()->GetVersionManager ();
+		vm->requestVersion (jid);
+
+		return new PendingVersionQuery { vm, jid, this };
 	}
 
 	void EntryBase::HandlePresence (const QXmppPresence& pres, const QString& resource)
@@ -742,25 +757,17 @@ namespace Xoox
 			const QString& node, const QByteArray& ver)
 	{
 		QString type = XooxUtil::GetClientIDName (node);
-		if (type.isEmpty ())
-		{
-			if (!node.isEmpty ())
-				qWarning () << Q_FUNC_INFO
-						<< "unknown client type for"
-						<< node;
-			type = "unknown";
-		}
+		if (type.isEmpty () && !node.isEmpty ())
+			qWarning () << Q_FUNC_INFO
+					<< "unknown client type for"
+					<< node;
 		Variant2ClientInfo_ [variant] ["client_type"] = type;
 
 		QString name = XooxUtil::GetClientHRName (node);
-		if (name.isEmpty ())
-		{
-			if (!node.isEmpty ())
-				qWarning () << Q_FUNC_INFO
-						<< "unknown client name for"
-						<< node;
-			name = "Unknown";
-		}
+		if (name.isEmpty () && !node.isEmpty ())
+			qWarning () << Q_FUNC_INFO
+					<< "unknown client name for"
+					<< node;
 		Variant2ClientInfo_ [variant] ["client_name"] = name;
 		Variant2ClientInfo_ [variant] ["raw_client_name"] = name;
 
@@ -786,7 +793,7 @@ namespace Xoox
 			qDebug () << "requesting ids for" << reqJid << reqVar;
 			QPointer<EntryBase> pThis (this);
 			QPointer<CapsManager> pCM (capsManager);
-			Account_->GetClientConnection ()->RequestInfo (reqJid,
+			Account_->GetClientConnection ()->GetDiscoManagerWrapper ()->RequestInfo (reqJid,
 				[ver, reqVar, pThis, pCM] (const QXmppDiscoveryIq& iq)
 				{
 					if (!ver.isEmpty () && pCM)
