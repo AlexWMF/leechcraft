@@ -588,7 +588,7 @@ namespace Azoth
 		QStringList result;
 		Q_FOREACH (const ICLEntry *entry, Entry2Items_.keys ())
 		{
-			if (entry->GetEntryType () != ICLEntry::ETChat)
+			if (entry->GetEntryType () != ICLEntry::EntryType::Chat)
 				continue;
 
 			Q_FOREACH (const QString& group, entry->Groups ())
@@ -640,8 +640,8 @@ namespace Azoth
 			return proxy->GetReturnValue ().toBool ();
 
 		return !ChatTabsManager_->IsActiveChat (entry) &&
-				(msg->GetMessageType () == IMessage::MTChatMessage ||
-				 msg->GetMessageType () == IMessage::MTMUCMessage);
+				(msg->GetMessageType () == IMessage::Type::ChatMessage ||
+				 msg->GetMessageType () == IMessage::Type::MUCMessage);
 	}
 
 	bool Core::IsHighlightMessage (IMessage *msg)
@@ -797,7 +797,7 @@ namespace Azoth
 
 		QString string;
 
-		if (msg->GetMessageType () == IMessage::MTMUCMessage)
+		if (msg->GetMessageType () == IMessage::Type::MUCMessage)
 		{
 			QUrl url ("azoth://insertnick/");
 			url.addEncodedQueryItem ("nick", QUrl::toPercentEncoding (nick));
@@ -931,9 +931,9 @@ namespace Azoth
 		QStringList GetDisplayGroups (const ICLEntry *clEntry)
 		{
 			QStringList groups;
-			if (clEntry->GetEntryType () == ICLEntry::ETUnauthEntry)
+			if (clEntry->GetEntryType () == ICLEntry::EntryType::UnauthEntry)
 				groups << Core::tr ("Unauthorized users");
-			else if (clEntry->GetEntryType () != ICLEntry::ETChat ||
+			else if (clEntry->GetEntryType () != ICLEntry::EntryType::Chat ||
 					XmlSettingsManager::Instance ()
 						.property ("GroupContacts").toBool ())
 				groups = clEntry->Groups ();
@@ -1023,14 +1023,14 @@ namespace Azoth
 
 				bool isMucCat = catItem->data (CLRIsMUCCategory).toBool ();
 				if (!isMucCat)
-					isMucCat = clEntry->GetEntryType () == ICLEntry::ETPrivateChat;
+					isMucCat = clEntry->GetEntryType () == ICLEntry::EntryType::PrivateChat;
 				catItem->setData (isMucCat, CLRIsMUCCategory);
 			}
 		}
 
 		HandleStatusChanged (clEntry->GetStatus (), clEntry, QString (), false);
 
-		if (clEntry->GetEntryType () == ICLEntry::ETPrivateChat)
+		if (clEntry->GetEntryType () == ICLEntry::EntryType::PrivateChat)
 			handleEntryPermsChanged (clEntry);
 
 		TooltipManager_->AddEntry (clEntry);
@@ -1098,7 +1098,7 @@ namespace Azoth
 	Entity Core::BuildStatusNotification (const EntryStatus& entrySt,
 		ICLEntry *entry, const QString& variant)
 	{
-		if (entry->GetEntryType () != ICLEntry::ETChat)
+		if (entry->GetEntryType () != ICLEntry::EntryType::Chat)
 			return Entity ();
 
 		IAccount *acc = qobject_cast<IAccount*> (entry->GetParentAccount ());
@@ -1726,7 +1726,7 @@ namespace Azoth
 
 			AddCLEntry (entry, accountItem);
 
-			if (entry->GetEntryType () & ICLEntry::ETMUC)
+			if (entry->GetEntryType () == ICLEntry::EntryType::MUC)
 			{
 				auto mucEntry = qobject_cast<IMUCEntry*> (item);
 
@@ -1756,7 +1756,7 @@ namespace Azoth
 				continue;
 			}
 
-			if (entry->GetEntryType () == ICLEntry::ETMUC &&
+			if (entry->GetEntryType () == ICLEntry::EntryType::MUC &&
 					XmlSettingsManager::Instance ().property ("CloseConfOnLeave").toBool ())
 				GetChatTabsManager ()->CloseChat (entry);
 
@@ -1907,7 +1907,7 @@ namespace Azoth
 			return;
 		}
 
-		if (entry->GetEntryType () == ICLEntry::ETChat)
+		if (entry->GetEntryType () == ICLEntry::EntryType::Chat)
 			newGroups = GetDisplayGroups (entry);
 
 		if (!Entry2Items_.contains (entry))
@@ -1983,8 +1983,8 @@ namespace Azoth
 		proxy.reset (new Util::DefaultHookProxy);
 		emit hookGotMessage2 (proxy, msgObj);
 
-		if (msg->GetMessageType () != IMessage::MTMUCMessage &&
-				msg->GetMessageType () != IMessage::MTChatMessage)
+		if (msg->GetMessageType () != IMessage::Type::MUCMessage &&
+				msg->GetMessageType () != IMessage::Type::ChatMessage)
 			return;
 
 		ICLEntry *parentCL = qobject_cast<ICLEntry*> (msg->ParentCLEntry ());
@@ -1995,7 +1995,7 @@ namespace Azoth
 			UnreadQueueManager_->AddMessage (msgObj);
 		}
 
-		if (msg->GetDirection () != IMessage::DIn ||
+		if (msg->GetDirection () != IMessage::Direction::In ||
 				ChatTabsManager_->IsActiveChat (parentCL))
 			return;
 
@@ -2008,7 +2008,7 @@ namespace Azoth
 		bool isHighlightMsg = false;
 		switch (msg->GetMessageType ())
 		{
-		case IMessage::MTChatMessage:
+		case IMessage::Type::ChatMessage:
 			if (XmlSettingsManager::Instance ()
 					.property ("NotifyAboutIncomingMessages").toBool ())
 			{
@@ -2017,7 +2017,7 @@ namespace Azoth
 							.arg (other->GetEntryName ());
 				else
 				{
-					const QString& body = Qt::escape (msg->GetBody ());
+					const QString& body = msg->GetEscapedBody ();
 					const QString& notifMsg = body.size () > 50 ?
 							body.left (50) + "..." :
 							body;
@@ -2027,7 +2027,7 @@ namespace Azoth
 				}
 			}
 			break;
-		case IMessage::MTMUCMessage:
+		case IMessage::Type::MUCMessage:
 		{
 			isHighlightMsg = IsHighlightMessage (msg);
 			if (isHighlightMsg && XmlSettingsManager::Instance ()
@@ -2039,7 +2039,7 @@ namespace Azoth
 							.arg (other->GetEntryName ());
 				else
 				{
-					const QString& body = Qt::escape (msg->GetBody ());
+					const QString& body = msg->GetEscapedBody ();
 					const QString& notifMsg = body.size () > 50 ?
 							body.left (50) + "..." :
 							body;
@@ -2062,7 +2062,7 @@ namespace Azoth
 		if (msgString.isEmpty ())
 			e.Mime_ += "+advanced";
 
-		ICLEntry *entry = msg->GetMessageType () == IMessage::MTMUCMessage ?
+		ICLEntry *entry = msg->GetMessageType () == IMessage::Type::MUCMessage ?
 				parentCL :
 				other;
 		BuildNotification (e, entry);
@@ -2071,7 +2071,7 @@ namespace Azoth
 		const int count = someItem ?
 				someItem->data (CLRUnreadMsgCount).toInt () :
 				0;
-		if (msg->GetMessageType () == IMessage::MTMUCMessage)
+		if (msg->GetMessageType () == IMessage::Type::MUCMessage)
 		{
 			e.Additional_ ["org.LC.AdvNotifications.EventType"] = isHighlightMsg ?
 					AN::TypeIMMUCHighlight :
@@ -2098,7 +2098,7 @@ namespace Azoth
 		e.Additional_ ["org.LC.AdvNotifications.Count"] = count;
 
 		e.Additional_ ["org.LC.AdvNotifications.ExtendedText"] = tr ("%n message(s)", 0, count);
-		e.Additional_ ["org.LC.Plugins.Azoth.Msg"] = Qt::escape (msg->GetBody ());
+		e.Additional_ ["org.LC.Plugins.Azoth.Msg"] = msg->GetEscapedBody ();
 
 		auto nh = new Util::NotificationActionHandler (e, this);
 		nh->AddFunction (tr ("Open chat"),
@@ -2459,7 +2459,7 @@ namespace Azoth
 	void Core::handleGroupContactsChanged ()
 	{
 		Q_FOREACH (ICLEntry *entry, Entry2Items_.keys ())
-			if (entry->GetEntryType () == ICLEntry::ETChat)
+			if (entry->GetEntryType () == ICLEntry::EntryType::Chat)
 				handleEntryGroupsChanged (GetDisplayGroups (entry), entry->GetQObject ());
 	}
 

@@ -847,7 +847,7 @@ namespace Xoox
 
 		const auto existingObj = ClientConnection_->GetCLEntry (jid, {});
 		const auto existing = qobject_cast<ICLEntry*> (existingObj);
-		if (existing && existing->GetEntryType () != ICLEntry::ETMUC)
+		if (existing && existing->GetEntryType () != ICLEntry::EntryType::MUC)
 		{
 			const auto res = QMessageBox::question (nullptr,
 					"LeechCraft",
@@ -955,7 +955,7 @@ namespace Xoox
 		return result;
 	}
 
-	QObject* GlooxAccount::CreateMessage (IMessage::MessageType type,
+	QObject* GlooxAccount::CreateMessage (IMessage::Type type,
 			const QString& variant,
 			const QString& body,
 			const QString& jid)
@@ -1060,7 +1060,7 @@ namespace Xoox
 				qobject_cast<ICLEntry*> (jidEntry)->GetHumanReadableID () :
 				jid;
 		for (auto& message : messages)
-			message.Nick_ = message.Dir_ == IMessage::Direction::DIn ?
+			message.Nick_ = message.Dir_ == IMessage::Direction::In ?
 					otherNick :
 					ourNick;
 

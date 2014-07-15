@@ -68,8 +68,8 @@ namespace MuCommands
 			const auto msgObj = azothProxy->CreateCoreMessage ({},
 					rich,
 					QDateTime::currentDateTime (),
-					IMessage::MTServiceMessage,
-					IMessage::DIn,
+					IMessage::Type::ServiceMessage,
+					IMessage::Direction::In,
 					entryObj,
 					entryObj);
 			const auto msg = qobject_cast<IMessage*> (msgObj);
@@ -115,8 +115,8 @@ namespace MuCommands
 				const auto msg = qobject_cast<IMessage*> (msgObj);
 				switch (msg->GetMessageType ())
 				{
-				case IMessage::MTChatMessage:
-				case IMessage::MTMUCMessage:
+				case IMessage::Type::ChatMessage:
+				case IMessage::Type::MUCMessage:
 					break;
 				default:
 					continue;
@@ -314,7 +314,7 @@ namespace MuCommands
 			auto nicks = ParseNicks (entry, text);
 			if (nicks.isEmpty ())
 			{
-				if (entry->GetEntryType () == ICLEntry::ETMUC)
+				if (entry->GetEntryType () == ICLEntry::EntryType::MUC)
 					return;
 				else
 					nicks << entry->GetHumanReadableID ();
@@ -776,7 +776,7 @@ namespace MuCommands
 		const auto& id = text.section (' ', 1, 1);
 		const auto& reason = text.section (' ', 2);
 
-		if (entry->GetEntryType () == ICLEntry::ETMUC)
+		if (entry->GetEntryType () == ICLEntry::EntryType::MUC)
 		{
 			const auto invitee = ResolveEntry (id, {}, entry->GetParentAccount ());
 			const auto& inviteeId = invitee ?
@@ -819,7 +819,7 @@ namespace MuCommands
 
 	bool Pm (IProxyObject *azothProxy, ICLEntry *entry, const QString& text)
 	{
-		if (entry->GetEntryType () != ICLEntry::ETMUC)
+		if (entry->GetEntryType () != ICLEntry::EntryType::MUC)
 			return false;
 
 		const auto& firstLine = text.section ('\n', 0, 0);
@@ -836,7 +836,7 @@ namespace MuCommands
 			return true;
 		}
 
-		const auto msgObj = part->CreateMessage (IMessage::MTChatMessage,
+		const auto msgObj = part->CreateMessage (IMessage::Type::ChatMessage,
 				part->Variants ().value (0), message);
 		const auto msg = qobject_cast<IMessage*> (msgObj);
 		msg->Send ();

@@ -142,10 +142,10 @@ namespace Xoox
 			msg += ": " + pres.statusText ();
 
 		RoomPublicMessage *message = new RoomPublicMessage (msg,
-				IMessage::DIn,
+				IMessage::Direction::In,
 				CLEntry_,
-				IMessage::MTStatusMessage,
-				IMessage::MSTParticipantLeave,
+				IMessage::Type::StatusMessage,
+				IMessage::SubType::ParticipantLeave,
 				GetParticipantEntry (nick));
 		CLEntry_->HandleMessage (message);
 	}
@@ -171,10 +171,10 @@ namespace Xoox
 					.arg (affiliation);
 
 		RoomPublicMessage *message = new RoomPublicMessage (msg,
-				IMessage::DIn,
+				IMessage::Direction::In,
 				CLEntry_,
-				IMessage::MTStatusMessage,
-				IMessage::MSTParticipantJoin,
+				IMessage::Type::StatusMessage,
+				IMessage::SubType::ParticipantJoin,
 				GetParticipantEntry (nick));
 		CLEntry_->HandleMessage (message);
 	}
@@ -191,10 +191,10 @@ namespace Xoox
 				.arg (pres.statusText ());
 
 		RoomPublicMessage *message = new RoomPublicMessage (msg,
-				IMessage::DIn,
+				IMessage::Direction::In,
 				CLEntry_,
-				IMessage::MTStatusMessage,
-				IMessage::MSTParticipantStatusChange,
+				IMessage::Type::StatusMessage,
+				IMessage::SubType::ParticipantStatusChange,
 				GetParticipantEntry (nick));
 		message->setProperty ("Azoth/Nick", nick);
 		message->setProperty ("Azoth/TargetState", state);
@@ -209,10 +209,10 @@ namespace Xoox
 				.arg (newNick);
 
 		auto message = new RoomPublicMessage (msg,
-				IMessage::DIn,
+				IMessage::Direction::In,
 				CLEntry_,
-				IMessage::MTStatusMessage,
-				IMessage::MSTParticipantNickChange,
+				IMessage::Type::StatusMessage,
+				IMessage::SubType::ParticipantNickChange,
 				GetParticipantEntry (newNick));
 		CLEntry_->HandleMessage (message);
 	}
@@ -229,10 +229,10 @@ namespace Xoox
 					.arg (reason);
 
 		RoomPublicMessage *message = new RoomPublicMessage (msg,
-				IMessage::DIn,
+				IMessage::Direction::In,
 				CLEntry_,
-				IMessage::MTStatusMessage,
-				IMessage::MSTKickNotification,
+				IMessage::Type::StatusMessage,
+				IMessage::SubType::KickNotification,
 				GetParticipantEntry (nick));
 		CLEntry_->HandleMessage (message);
 	}
@@ -249,10 +249,10 @@ namespace Xoox
 					.arg (reason);
 
 		RoomPublicMessage *message = new RoomPublicMessage (msg,
-				IMessage::DIn,
+				IMessage::Direction::In,
 				CLEntry_,
-				IMessage::MTStatusMessage,
-				IMessage::MSTBanNotification,
+				IMessage::Type::StatusMessage,
+				IMessage::SubType::BanNotification,
 				GetParticipantEntry (nick));
 		CLEntry_->HandleMessage (message);
 	}
@@ -277,10 +277,10 @@ namespace Xoox
 					.arg (reason);
 
 		RoomPublicMessage *message = new RoomPublicMessage (msg,
-				IMessage::DIn,
+				IMessage::Direction::In,
 				CLEntry_,
-				IMessage::MTStatusMessage,
-				IMessage::MSTParticipantRoleAffiliationChange,
+				IMessage::Type::StatusMessage,
+				IMessage::SubType::ParticipantRoleAffiliationChange,
 				GetParticipantEntry (nick));
 		CLEntry_->HandleMessage (message);
 	}
@@ -360,10 +360,10 @@ namespace Xoox
 						tr ("no message") :
 						errorText);
 		RoomPublicMessage *message = new RoomPublicMessage (text,
-				IMessage::DIn,
+				IMessage::Direction::In,
 				CLEntry_,
-				IMessage::MTEventMessage,
-				IMessage::MSTOther);
+				IMessage::Type::EventMessage,
+				IMessage::SubType::Other);
 		CLEntry_->HandleMessage (message);
 
 		switch (pres.error ().condition ())
@@ -469,10 +469,10 @@ namespace Xoox
 							.arg (msg.subject ());
 
 				message = new RoomPublicMessage (string,
-					IMessage::DIn,
+					IMessage::Direction::In,
 					CLEntry_,
-					IMessage::MTEventMessage,
-					IMessage::MSTRoomSubjectChange);
+					IMessage::Type::EventMessage,
+					IMessage::SubType::RoomSubjectChange);
 			}
 			else if (!nick.isEmpty ())
 			{
@@ -481,10 +481,10 @@ namespace Xoox
 			}
 			else if (!msg.body ().isEmpty ())
 				message = new RoomPublicMessage (msg.body (),
-					IMessage::DIn,
+					IMessage::Direction::In,
 					CLEntry_,
-					IMessage::MTEventMessage,
-					IMessage::MSTOther);
+					IMessage::Type::EventMessage,
+					IMessage::SubType::Other);
 
 			if (message)
 				CLEntry_->HandleMessage (message);
@@ -512,11 +512,11 @@ namespace Xoox
 		}
 	}
 
-	GlooxMessage* RoomHandler::CreateMessage (IMessage::MessageType,
+	GlooxMessage* RoomHandler::CreateMessage (IMessage::Type,
 			const QString& nick, const QString& body)
 	{
-		GlooxMessage *message = new GlooxMessage (IMessage::MTChatMessage,
-				IMessage::DOut,
+		GlooxMessage *message = new GlooxMessage (IMessage::Type::ChatMessage,
+				IMessage::Direction::Out,
 				GetRoomJID (),
 				nick,
 				Account_->GetClientConnection ().get ());

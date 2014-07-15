@@ -73,7 +73,7 @@ namespace Xoox
 
 	ICLEntry::EntryType RoomParticipantEntry::GetEntryType () const
 	{
-		return ETPrivateChat;
+		return EntryType::PrivateChat;
 	}
 
 	QString RoomParticipantEntry::GetEntryName () const
@@ -111,7 +111,7 @@ namespace Xoox
 		return { {} };
 	}
 
-	QObject* RoomParticipantEntry::CreateMessage (IMessage::MessageType type,
+	QObject* RoomParticipantEntry::CreateMessage (IMessage::Type type,
 			const QString&, const QString& body)
 	{
 		GlooxMessage *msg = RoomHandler_->CreateMessage (type, Nick_, body);
