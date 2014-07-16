@@ -27,32 +27,26 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#include "mailtreedelegate.h"
-#include <QPainter>
-#include "mailtab.h"
-#include "mailmodel.h"
+#pragma once
+
+#include <QSortFilterProxyModel>
 
 namespace LeechCraft
 {
 namespace Snails
 {
-	MailTreeDelegate::MailTreeDelegate (QObject *parent)
-	: QStyledItemDelegate (parent)
+	class MailSortModel : public QSortFilterProxyModel
 	{
-	}
+		Q_OBJECT
 
-	void MailTreeDelegate::paint (QPainter *painter,
-			const QStyleOptionViewItem& stockItem, const QModelIndex& index) const
-	{
-		const bool isRead = index.data (MailModel::MailRole::IsRead).toBool ();
-		const auto hasUnreadChildren = index.data (MailModel::MailRole::UnreadChildrenCount).toInt ();
-
-		QStyleOptionViewItemV4 item = stockItem;
-		if (!isRead)
-			item.font.setBold (true);
-		if (hasUnreadChildren)
-			item.font.setUnderline (true);
-		QStyledItemDelegate::paint (painter, item, index);
-	}
+		bool RespectUnreadRoots_ = false;
+		bool RespectUnreadChildren_ = false;
+	public:
+		MailSortModel (QObject* = nullptr);
+	protected:
+		bool lessThan (const QModelIndex&, const QModelIndex&) const;
+	private slots:
+		void handleRespectUnreadRootsChanged ();
+	};
 }
 }

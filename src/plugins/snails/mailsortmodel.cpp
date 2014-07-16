@@ -27,32 +27,56 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#include "mailtreedelegate.h"
-#include <QPainter>
-#include "mailtab.h"
+#include "mailsortmodel.h"
 #include "mailmodel.h"
+#include "xmlsettingsmanager.h"
 
 namespace LeechCraft
 {
 namespace Snails
 {
-	MailTreeDelegate::MailTreeDelegate (QObject *parent)
-	: QStyledItemDelegate (parent)
+	MailSortModel::MailSortModel (QObject *parent)
+	: QSortFilterProxyModel { parent }
 	{
+		XmlSettingsManager::Instance ().RegisterObject ({
+					"RootsRespectRead",
+					"RootsRespectReadChildren"
+				},
+				this, "handleRespectUnreadRootsChanged");
+		handleRespectUnreadRootsChanged ();
 	}
 
-	void MailTreeDelegate::paint (QPainter *painter,
-			const QStyleOptionViewItem& stockItem, const QModelIndex& index) const
+	bool MailSortModel::lessThan (const QModelIndex& left, const QModelIndex& right) const
 	{
-		const bool isRead = index.data (MailModel::MailRole::IsRead).toBool ();
-		const auto hasUnreadChildren = index.data (MailModel::MailRole::UnreadChildrenCount).toInt ();
+		if (left.parent ().isValid () ||
+				right.parent ().isValid () ||
+				!RespectUnreadRoots_)
+			return QSortFilterProxyModel::lessThan (left, right);
 
-		QStyleOptionViewItemV4 item = stockItem;
-		if (!isRead)
-			item.font.setBold (true);
-		if (hasUnreadChildren)
-			item.font.setUnderline (true);
-		QStyledItemDelegate::paint (painter, item, index);
+		auto leftRead = left.data (MailModel::MailRole::IsRead).toBool ();
+		auto rightRead = right.data (MailModel::MailRole::IsRead).toBool ();
+
+		if (RespectUnreadChildren_)
+		{
+			if (left.data (MailModel::MailRole::UnreadChildrenCount).toInt ())
+				leftRead = false;
+			if (right.data (MailModel::MailRole::UnreadChildrenCount).toInt ())
+				rightRead = false;
+		}
+
+		if (leftRead == rightRead)
+			return QSortFilterProxyModel::lessThan (left, right);
+
+		return leftRead && !rightRead;
+	}
+
+	void MailSortModel::handleRespectUnreadRootsChanged ()
+	{
+		RespectUnreadRoots_ = XmlSettingsManager::Instance ()
+				.property ("RootsRespectRead").toBool ();
+		RespectUnreadChildren_ = XmlSettingsManager::Instance ()
+				.property ("RootsRespectReadChildren").toBool ();
+		invalidate ();
 	}
 }
 }

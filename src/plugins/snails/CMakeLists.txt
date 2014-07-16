@@ -45,6 +45,7 @@ set (SRCS
 	viewcolumnsmanager.cpp
 	texteditoradaptor.cpp
 	concurrentexceptions.cpp
+	mailsortmodel.cpp
 	)
 set (FORMS
 	mailtab.ui
@@ -54,6 +55,7 @@ set (FORMS
 	)
 set (RESOURCES snailsresources.qrc)
 CreateTrs ("snails" "en;ru_RU" COMPILED_TRANSLATIONS)
+CreateTrsUpTarget("snails" "en;ru_RU" "${SRCS}" "${FORMS}" "snailssettings.xml")
 QT4_WRAP_UI (UIS_H ${FORMS})
 QT4_ADD_RESOURCES (RCCS ${RESOURCES})
 
