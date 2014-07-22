@@ -78,7 +78,7 @@ namespace Snails
 
 	MailModel::MailModel (QObject *parent)
 	: QAbstractItemModel { parent }
-	, Headers_ { tr ("From"), tr ("Subject"), tr ("Date"), tr ("Size")  }
+	, Headers_ { tr ("From"), {}, {}, {}, tr ("Subject"), tr ("Date"), tr ("Size")  }
 	, Folder_ { "INBOX" }
 	, Root_ { std::make_shared<TreeNode> () }
 	{
@@ -119,18 +119,40 @@ namespace Snails
 		case Qt::DisplayRole:
 		case Sort:
 			break;
+		case Qt::TextAlignmentRole:
+		{
+			switch (column)
+			{
+			case Column::StatusIcon:
+			case Column::UnreadChildren:
+				return Qt::AlignHCenter;
+			default:
+				return {};
+			}
+		}
 		case Qt::DecorationRole:
 		{
-			if (column != Column::Subject)
-				return {};
-
 			QString iconName;
-			if (!msg->IsRead ())
-				iconName = "mail-unread-new";
-			else if (structItem->UnreadChildren_.size ())
-				iconName = "mail-unread";
-			else
-				iconName = "mail-read";
+
+			switch (column)
+			{
+			case Column::StatusIcon:
+				if (!msg->IsRead ())
+					iconName = "mail-unread-new";
+				else if (structItem->UnreadChildren_.size ())
+					iconName = "mail-unread";
+				else
+					iconName = "mail-read";
+				break;
+			case Column::AttachIcon:
+				if (!msg->GetAttachments ().isEmpty ())
+					iconName = "mail-attachment";
+			default:
+				break;
+			}
+
+			if (iconName.isEmpty ())
+				return {};
 
 			return Core::Instance ().GetProxy ()->GetIconThemeManager ()->GetIcon (iconName);
 		}
@@ -163,6 +185,16 @@ namespace Snails
 				return msg->GetSize ();
 			else
 				return Util::MakePrettySize (msg->GetSize ());
+		case Column::UnreadChildren:
+		{
+			const auto unread = structItem->UnreadChildren_.size ();
+			if (unread)
+				return unread;
+
+			return role == Sort ? 0 : QString::fromUtf8 ("·");
+		}
+		case Column::StatusIcon:
+			break;
 		}
 
 		return {};
@@ -209,6 +241,11 @@ namespace Snails
 	QStringList MailModel::GetCurrentFolder () const
 	{
 		return Folder_;
+	}
+
+	Message_ptr MailModel::GetMessage (const QByteArray& id) const
+	{
+		return GetMessageByFolderId (id);
 	}
 
 	void MailModel::Clear ()

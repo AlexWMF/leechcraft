@@ -248,10 +248,10 @@ namespace Azoth
 
 		/** @brief Formats the date for the given message.
 		 *
-		 * This function should be used to format the date when
-		 * displaying the given message.
+		 * This function should be used to format the date of a
+		 * \em message when displaying it.
 		 *
-		 * @param[in] date The date to format.
+		 * @param[in] date The timestamp of the message to format.
 		 * @param[in] message The message object implementing IMessage.
 		 * @return The formatted date string.
 		 */
@@ -298,16 +298,32 @@ namespace Azoth
 
 		virtual QStringList FindLinks (const QString&) = 0;
 
-		virtual QObject* CreateCoreMessage (QString body,
-				const QString& richBody,
+		virtual QObject* CreateCoreMessage (const QString& body,
 				const QDateTime& date,
 				IMessage::Type type,
 				IMessage::Direction dir,
-				QObject *other, QObject *parent = nullptr) = 0;
+				QObject *other,
+				QObject *parent = nullptr) = 0;
+
+		virtual QString ToPlainBody (QString body) = 0;
 
 		virtual bool IsMessageRead (QObject *msgObj) = 0;
 
 		virtual void MarkMessagesAsRead (QObject *entryObject) = 0;
+
+		/** @brief Formats the \em datetime according to current locale.
+		 *
+		 * This method returns the \em datetime formatted according to
+		 * the current locale. The timezones are respected.
+		 *
+		 * The primary difference from <code>QLocale {}.toString (datetime)</code>
+		 * is that Boost.Locale backend is used if available to avoid
+		 * nasty timezone-related problems.
+		 *
+		 * @param[in] datetime The timestamp to format.
+		 * @return The formatted \em datetime as string.
+		 */
+		virtual QString PrettyPrintDateTime (const QDateTime& datetime) = 0;
 	};
 }
 }

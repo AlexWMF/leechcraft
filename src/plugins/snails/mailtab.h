@@ -30,6 +30,7 @@
 #pragma once
 
 #include <QWidget>
+#include <interfaces/core/icoreproxy.h>
 #include <interfaces/ihavetabs.h>
 #include "ui_mailtab.h"
 #include "account.h"
@@ -51,6 +52,8 @@ namespace Snails
 
 		Ui::MailTab Ui_;
 
+		const ICoreProxy_ptr Proxy_;
+
 		QToolBar * const TabToolbar_;
 		QToolBar * const MsgToolbar_;
 
@@ -68,6 +71,8 @@ namespace Snails
 		QMenu *MsgAttachments_;
 		QToolButton *MsgAttachmentsButton_;
 
+		QAction *MsgViewHeaders_;
+
 		TabClassInfo TabClass_;
 		QObject *PMT_;
 
@@ -75,7 +80,7 @@ namespace Snails
 		Account_ptr CurrAcc_;
 		Message_ptr CurrMsg_;
 	public:
-		MailTab (const TabClassInfo&, QObject*, QWidget* = 0);
+		MailTab (const ICoreProxy_ptr&, const TabClassInfo&, QObject*, QWidget* = 0);
 
 		TabClassInfo GetTabClassInfo () const;
 		QObject* ParentMultiTabs ();
@@ -90,7 +95,7 @@ namespace Snails
 	private slots:
 		void handleCurrentAccountChanged (const QModelIndex&);
 		void handleCurrentTagChanged (const QModelIndex&);
-		void handleMailSelected (const QModelIndex&);
+		void handleMailSelected ();
 
 		void handleFoldersUpdated ();
 
@@ -101,13 +106,17 @@ namespace Snails
 		void handleMoveMessages (QAction*);
 		void handleMarkMsgUnread ();
 		void handleRemoveMsgs ();
+		void handleViewHeaders ();
 
 		void handleAttachment ();
+		void handleAttachment (const QByteArray&, const QStringList&, const QString&);
 		void handleFetchNewMail ();
 
 		void handleMessageBodyFetched (Message_ptr);
 	signals:
 		void removeTab (QWidget*);
+
+		void mailActionsEnabledChanged (bool);
 	};
 }
 }

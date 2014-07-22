@@ -30,75 +30,20 @@
 #pragma once
 
 #include <QWidget>
-#include <interfaces/ihavetabs.h>
-#include "ui_composemessagetab.h"
-#include "account.h"
-
-class QSignalMapper;
-class IEditorWidget;
+#include <vmime/header.hpp>
+#include "ui_headersviewwidget.h"
 
 namespace LeechCraft
 {
 namespace Snails
 {
-	class ComposeMessageTab : public QWidget
-							, public ITabWidget
+	class HeadersViewWidget : public QWidget
 	{
 		Q_OBJECT
-		Q_INTERFACES (ITabWidget)
 
-		static QObject *S_ParentPlugin_;
-		static TabClassInfo S_TabClassInfo_;
-
-		Ui::ComposeMessageTab Ui_;
-
-		QToolBar *Toolbar_;
-		QMenu *AccountsMenu_;
-		QMenu *AttachmentsMenu_;
-		QMenu *EditorsMenu_;
-
-		QSignalMapper *EditorsMapper_;
-
-		QList<QWidget*> MsgEditWidgets_;
-		QList<IEditorWidget*> MsgEdits_;
-
-		Message_ptr ReplyMessage_;
+		Ui::HeadersViewWidget Ui_;
 	public:
-		static void SetParentPlugin (QObject*);
-		static void SetTabClassInfo (const TabClassInfo&);
-
-		ComposeMessageTab (QWidget* = 0);
-
-		TabClassInfo GetTabClassInfo () const;
-		QObject* ParentMultiTabs();
-		void Remove();
-		QToolBar* GetToolBar() const;
-
-		void SelectAccount (const Account_ptr&);
-		void PrepareReply (const Message_ptr&);
-	private:
-		void PrepareReplyEditor (const Message_ptr&);
-		void PrepareReplyBody (const Message_ptr&);
-
-		void SetupToolbar ();
-		void SetupEditors ();
-
-		void SelectPlainEditor ();
-		void SelectHtmlEditor ();
-
-		IEditorWidget* GetCurrentEditor () const;
-
-		void SetMessageReferences (const Message_ptr&) const;
-	private slots:
-		void handleMessageSent ();
-
-		void handleSend ();
-		void handleAddAttachment ();
-		void handleRemoveAttachment ();
-
-		void handleEditorSelected (int);
-	signals:
-		void removeTab (QWidget*);
+		HeadersViewWidget (const vmime::shared_ptr<const vmime::header>&, QWidget* = nullptr);
 	};
 }
 }

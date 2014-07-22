@@ -46,12 +46,15 @@ set (SRCS
 	texteditoradaptor.cpp
 	concurrentexceptions.cpp
 	mailsortmodel.cpp
+	headersviewwidget.cpp
+	mailwebpage.cpp
 	)
 set (FORMS
 	mailtab.ui
 	accountslistwidget.ui
 	accountconfigdialog.ui
 	composemessagetab.ui
+	headersviewwidget.ui
 	)
 set (RESOURCES snailsresources.qrc)
 CreateTrs ("snails" "en;ru_RU" COMPILED_TRANSLATIONS)

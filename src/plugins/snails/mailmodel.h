@@ -56,6 +56,9 @@ namespace Snails
 		enum class Column
 		{
 			From,
+			UnreadChildren,
+			AttachIcon,
+			StatusIcon,
 			Subject,
 			Date,
 			Size
@@ -80,6 +83,8 @@ namespace Snails
 
 		void SetFolder (const QStringList&);
 		QStringList GetCurrentFolder () const;
+
+		Message_ptr GetMessage (const QByteArray&) const;
 
 		void Clear ();
 

@@ -29,76 +29,27 @@
 
 #pragma once
 
-#include <QWidget>
-#include <interfaces/ihavetabs.h>
-#include "ui_composemessagetab.h"
-#include "account.h"
-
-class QSignalMapper;
-class IEditorWidget;
+#include <QWebPage>
+#include <interfaces/core/icoreproxy.h>
 
 namespace LeechCraft
 {
 namespace Snails
 {
-	class ComposeMessageTab : public QWidget
-							, public ITabWidget
+	class MailWebPage : public QWebPage
 	{
 		Q_OBJECT
-		Q_INTERFACES (ITabWidget)
 
-		static QObject *S_ParentPlugin_;
-		static TabClassInfo S_TabClassInfo_;
-
-		Ui::ComposeMessageTab Ui_;
-
-		QToolBar *Toolbar_;
-		QMenu *AccountsMenu_;
-		QMenu *AttachmentsMenu_;
-		QMenu *EditorsMenu_;
-
-		QSignalMapper *EditorsMapper_;
-
-		QList<QWidget*> MsgEditWidgets_;
-		QList<IEditorWidget*> MsgEdits_;
-
-		Message_ptr ReplyMessage_;
+		const ICoreProxy_ptr Proxy_;
 	public:
-		static void SetParentPlugin (QObject*);
-		static void SetTabClassInfo (const TabClassInfo&);
-
-		ComposeMessageTab (QWidget* = 0);
-
-		TabClassInfo GetTabClassInfo () const;
-		QObject* ParentMultiTabs();
-		void Remove();
-		QToolBar* GetToolBar() const;
-
-		void SelectAccount (const Account_ptr&);
-		void PrepareReply (const Message_ptr&);
+		MailWebPage (const ICoreProxy_ptr&, QObject* = nullptr);
+	protected:
+		bool acceptNavigationRequest (QWebFrame*, const QNetworkRequest&, NavigationType);
 	private:
-		void PrepareReplyEditor (const Message_ptr&);
-		void PrepareReplyBody (const Message_ptr&);
-
-		void SetupToolbar ();
-		void SetupEditors ();
-
-		void SelectPlainEditor ();
-		void SelectHtmlEditor ();
-
-		IEditorWidget* GetCurrentEditor () const;
-
-		void SetMessageReferences (const Message_ptr&) const;
-	private slots:
-		void handleMessageSent ();
-
-		void handleSend ();
-		void handleAddAttachment ();
-		void handleRemoveAttachment ();
-
-		void handleEditorSelected (int);
+		void HandleAttachment (const QUrl&);
 	signals:
-		void removeTab (QWidget*);
+		void attachmentSelected (const QByteArray& msgId,
+				const QStringList& folder, const QString& attName);
 	};
 }
 }

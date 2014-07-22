@@ -1,15 +1,87 @@
 <descs>
-	<command name="/vcard">
-		<desc>Shows VCards for the given participants, or a roster entry, or a JID.</desc>
-		<help>Usage: &lt;code>/vcard [id]\n[id]...&lt;/code>
+	<command name="/setperm">
+		<desc>Sets the permissions (like affiliation or role in case of XMPP) of a given participant in a multiuser chat room.</desc>
+		<help>Usage: @/setperm@ _permclass_ _perm_ &lt;@nick@|@id@> &lt;_nick_|_id_>
+_[reason]_
 
-Shows (and fetches, if required) VCards for the users identified by &lt;code>id&lt;/code>. Multiple IDs could be given, separated by line breaks.
+It should be explicitly stated whether currently present participant nickname is mentioned or some protocol-defined ID string (like a JID in case of XMPP). The @nick@ argument is used in the former case, and @id@ — in the latter.
+
+The list of available permission classes and permissions for a given protocol may be obtained via the @/listperms@ command.
+
+Please note that you may type only first few letters of a permission class and value for _permclass_ and _perm_ parameters respectively, if only one string starts with the corresponding letters.</help>
+	</command>
+	<command name="/names">
+		<desc>Shows the nick names of multiuser chat room participants.</desc>
+	</command>
+	<command name="/urls">
+		<desc>Lists the URLs appeared in the current chat session.</desc>
+		<help>Usage: @/urls@
+
+Returns the ordered list of all URLs that appeared in the current chat session. Duplicates are omitted. The indexes of the URLs can be passed as parameters to @/openurl@ and @/fetchurl@ commands.</help>
+	</command>
+	<command name="/openurl">
+		<desc>Opens an URL from the current chat session by its index.</desc>
+		<help>Usage: @/openurl@ _[idx1]_ _[idx2]_ ...
+
+Opens the URLs identified by their indexes in the list returned by the @/urls@ command. Multiple indexes can be given. If no indexes are given, the last URL is opened.</help>
+	</command>
+	<command name="/fetchurl">
+		<desc>Downloads an URL from the current chat session by its index.</desc>
+		<help>Usage: @/fetchurl@ _[idx1]_ _[idx2]_ ...
+
+Downloads the URLs identified by their indexes in the list returned by the @/urls@ command. Multiple indexes can be given. If no indexes are given, the last URL is downloaded.</help>
+	</command>
+	<command name="/vcard">
+		<desc>Shows VCards for the given participants, or a roster entry, or any protocol user identified by their ID.</desc>
+		<help>Usage: @/vcard@ _[id1]_
+_[id2]_...
+
+Shows (and fetches, if required) VCards for the users identified by _id_. Multiple IDs could be given, separated by line breaks.
 
 An ID is resolved in the following way:
-&lt;ol>
-&lt;li>If the command is issued in a multiuser chat room, the ID is matched against the nicknames of the participants on the room.&lt;/li>
-&lt;li>The ID is matched against names and protocol-specific IDs (like JIDs) of participants in the roster.&lt;/li>
-&lt;li>If the protocol plugin supports that, the ID is resolved as a global entry ID in the protocol, even if it is not present in the roster.&lt;/li>
-&lt;/ol></help>
+# If the command is issued in a multiuser chat room, the ID is matched against the nicknames of the participants on the room.
+# The ID is matched against names and protocol-specific IDs (like JIDs) of participants in the roster.
+# If the protocol plugin supports that, the ID is resolved as a global entry ID in the protocol, even if it is not present in the roster.
+
+If no ID is given, the author of last message is considered in case of a multiuser chat, or the current contact in case of a standard private chat.</help>
+	</command>
+	<command name="/version">
+		<desc>Shows the information about a participant or contact's software.</desc>
+		<help>Usage: @/version@ _[id1]_
+_[id2]_...
+
+See the documentation for the @/vcard@ command regarding resolving IDs.</help>
+	</command>
+	<command name="/time">
+		<desc>Shows the current time of a participant or a contact or a remote ID.</desc>
+		<help>Usage: @/time@ _[id1]_
+_[id2]_...
+
+For each ID, their respective timezone, the local time in their timezone and their UTC time is returned.
+
+See the documentation for the @/vcard@ command regarding resolving IDs.</help>
+	</command>
+	<command name="/disco">
+		<desc>Opens the service discovery tab for the given participant or ID.</desc>
+		<help>Usage: @/disco@ _[id1]_
+_[id2]_...
+
+See the documentation for the @/vcard@ command regarding resolving IDs.</help>
+	</command>
+	<command name="/nick">
+		<desc>Changes the nickname used in the current multiuser chat room.</desc>
+		<help>Usage: @/nick@ _new nick_</help>
+	</command>
+	<command name="/subject">
+		<desc>Changes the subject in the current multiuser chat room.</desc>
+		<help>Usage: @/subject@ _The new room subject._
+
+The subject may span multiple lines.
+
+Please note that in most protocols there is no reliable way to know if MUC subject may be changed in advance. Thus, this command will try its best to guess if subject change is allowed, but it still may silently fail.</help>
+	</command>
+	<command name="/leave">
+		<desc>Leaves the current multiuser chat room.</desc>
+		<help>Usage: @/leave@ _[leave message]_</help>
 	</command>
 </descs>

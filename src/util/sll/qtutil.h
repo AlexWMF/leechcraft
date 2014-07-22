@@ -29,76 +29,58 @@
 
 #pragma once
 
-#include <QWidget>
-#include <interfaces/ihavetabs.h>
-#include "ui_composemessagetab.h"
-#include "account.h"
-
-class QSignalMapper;
-class IEditorWidget;
+#include <boost/range.hpp>
 
 namespace LeechCraft
 {
-namespace Snails
+namespace Util
 {
-	class ComposeMessageTab : public QWidget
-							, public ITabWidget
+	template<typename Iter, typename Assoc, template<typename K, typename V> class PairType>
+	class StlAssocIteratorAdaptor : public boost::iterator_adaptor<
+				StlAssocIteratorAdaptor<Iter, Assoc, PairType>,
+				Iter,
+				PairType<typename Assoc::key_type, typename Assoc::mapped_type>,
+				boost::use_default,
+				PairType<typename Assoc::key_type, typename Assoc::mapped_type>
+			>
 	{
-		Q_OBJECT
-		Q_INTERFACES (ITabWidget)
+		friend class boost::iterator_core_access;
 
-		static QObject *S_ParentPlugin_;
-		static TabClassInfo S_TabClassInfo_;
-
-		Ui::ComposeMessageTab Ui_;
-
-		QToolBar *Toolbar_;
-		QMenu *AccountsMenu_;
-		QMenu *AttachmentsMenu_;
-		QMenu *EditorsMenu_;
-
-		QSignalMapper *EditorsMapper_;
-
-		QList<QWidget*> MsgEditWidgets_;
-		QList<IEditorWidget*> MsgEdits_;
-
-		Message_ptr ReplyMessage_;
+		typedef boost::iterator_adaptor<
+					StlAssocIteratorAdaptor<Iter, Assoc, PairType>,
+					Iter,
+					PairType<typename Assoc::key_type, typename Assoc::mapped_type>,
+					boost::use_default,
+					PairType<typename Assoc::key_type, typename Assoc::mapped_type>
+				> Super_t;
 	public:
-		static void SetParentPlugin (QObject*);
-		static void SetTabClassInfo (const TabClassInfo&);
+		StlAssocIteratorAdaptor () = default;
 
-		ComposeMessageTab (QWidget* = 0);
-
-		TabClassInfo GetTabClassInfo () const;
-		QObject* ParentMultiTabs();
-		void Remove();
-		QToolBar* GetToolBar() const;
-
-		void SelectAccount (const Account_ptr&);
-		void PrepareReply (const Message_ptr&);
+		StlAssocIteratorAdaptor (const Iter& it)
+		: Super_t { it }
+		{
+		}
 	private:
-		void PrepareReplyEditor (const Message_ptr&);
-		void PrepareReplyBody (const Message_ptr&);
-
-		void SetupToolbar ();
-		void SetupEditors ();
-
-		void SelectPlainEditor ();
-		void SelectHtmlEditor ();
-
-		IEditorWidget* GetCurrentEditor () const;
-
-		void SetMessageReferences (const Message_ptr&) const;
-	private slots:
-		void handleMessageSent ();
-
-		void handleSend ();
-		void handleAddAttachment ();
-		void handleRemoveAttachment ();
-
-		void handleEditorSelected (int);
-	signals:
-		void removeTab (QWidget*);
+		typename Super_t::reference dereference () const
+		{
+			return { this->base ().key (), this->base ().value () };
+		}
 	};
+
+	template<typename Iter, typename Assoc, template<typename K, typename V> class PairType>
+	struct StlAssocRange : public boost::iterator_range<StlAssocIteratorAdaptor<Iter, Assoc, PairType>>
+	{
+	public:
+		StlAssocRange (const Assoc& assoc)
+		: boost::iterator_range<StlAssocIteratorAdaptor<Iter, Assoc, PairType>> { assoc.begin (), assoc.end () }
+		{
+		}
+	};
+
+	template<template<typename K, typename V> class PairType = std::pair, typename Assoc>
+	StlAssocRange<typename Assoc::const_iterator, Assoc, PairType> Stlize (const Assoc& assoc)
+	{
+		return { assoc };
+	}
 }
 }

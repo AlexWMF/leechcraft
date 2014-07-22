@@ -28,6 +28,9 @@
  **********************************************************************/
 
 #include "proxyobject.h"
+#ifdef USE_BOOST_LOCALE
+#include <boost/locale.hpp>
+#endif
 #include <QInputDialog>
 #include <QtDebug>
 #include <util/xpc/util.h>
@@ -396,26 +399,25 @@ namespace Azoth
 		return result;
 	}
 
-	QObject* ProxyObject::CreateCoreMessage (QString body,
-			const QString& richBody, const QDateTime& date,
+	QObject* ProxyObject::CreateCoreMessage (const QString& body,
+			const QDateTime& date,
 			IMessage::Type type, IMessage::Direction dir,
 			QObject *other, QObject *parent)
 	{
-		if (body.isEmpty ())
+		return new CoreMessage (body, date, type, dir, other, parent);
+	}
+
+	QString ProxyObject::ToPlainBody (QString body)
+	{
+		body.replace ("<li>", "\n * ");
+		auto pos = 0;
+		while ((pos = body.indexOf ('<', pos)) != -1)
 		{
-			body = richBody;
-			body.replace ("<li>", "\n * ");
-			auto pos = 0;
-			while ((pos = body.indexOf ('<', pos)) != -1)
-			{
-				const auto endPos = body.indexOf ('>', pos + 1);
-				body.remove (pos, endPos - pos + 1);
-			}
+			const auto endPos = body.indexOf ('>', pos + 1);
+			body.remove (pos, endPos - pos + 1);
 		}
 
-		const auto msg = new CoreMessage (body, date, type, dir, other, parent);
-		msg->SetRichBody (richBody);
-		return msg;
+		return body;
 	}
 
 	bool ProxyObject::IsMessageRead (QObject *msgObj)
@@ -426,6 +428,33 @@ namespace Azoth
 	void ProxyObject::MarkMessagesAsRead (QObject *entryObj)
 	{
 		Core::Instance ().GetUnreadQueueManager ()->clearMessagesForEntry (entryObj);
+	}
+
+	QString ProxyObject::PrettyPrintDateTime (const QDateTime& dt)
+	{
+#ifdef USE_BOOST_LOCALE
+		static class LocaleInitializer
+		{
+		public:
+			LocaleInitializer ()
+			{
+				boost::locale::generator gen;
+				std::locale::global (gen (""));
+			}
+		} loc;
+
+		const auto& cal = dt.timeSpec () == Qt::LocalTime ?
+				boost::locale::calendar {} :
+				boost::locale::calendar { "GMT" };
+		boost::locale::date_time bdt { static_cast<double> (dt.toTime_t ()),  cal };
+
+		std::ostringstream ostr;
+		ostr << bdt;
+
+		return QString::fromUtf8 (ostr.str ().c_str ());
+#else
+		return QLocale {}.toString (dt);
+#endif
 	}
 }
 }

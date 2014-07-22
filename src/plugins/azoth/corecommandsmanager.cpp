@@ -62,8 +62,7 @@ namespace Azoth
 					.arg ("<code>/help command</code>");
 
 			const auto entryObj = entry->GetQObject ();
-			const auto msgObj = ProxyObject {}.CreateCoreMessage ({},
-					body,
+			const auto msgObj = ProxyObject {}.CreateCoreMessage (body,
 					QDateTime::currentDateTime (),
 					IMessage::Type::ServiceMessage,
 					IMessage::Direction::In,
@@ -89,8 +88,7 @@ namespace Azoth
 				message += "<br/>" + cmd.Help_;
 
 			const auto entryObj = entry->GetQObject ();
-			const auto msgObj = ProxyObject {}.CreateCoreMessage ({},
-					message,
+			const auto msgObj = ProxyObject {}.CreateCoreMessage (message,
 					QDateTime::currentDateTime (),
 					IMessage::Type::ServiceMessage,
 					IMessage::Direction::In,
@@ -119,8 +117,7 @@ namespace Azoth
 					.arg ("<code>" + name + "</code>");
 
 			const auto entryObj = entry->GetQObject ();
-			const auto msgObj = ProxyObject {}.CreateCoreMessage ({},
-					body,
+			const auto msgObj = ProxyObject {}.CreateCoreMessage (body,
 					QDateTime::currentDateTime (),
 					IMessage::Type::ServiceMessage,
 					IMessage::Direction::In,
@@ -162,10 +159,16 @@ namespace Azoth
 		{ "/help" },
 		&Help,
 		tr ("Show the list of all commands or get help for a specific command."),
-		tr ("Usage: ") + "<code>/clear " + tr ("[command1] [command2] ...") + "</code><br/>" +
+		tr ("Usage: ") + "<em>/help " + tr ("[command1] [command2] ...") + "</em><br/>" +
 				tr ("Shows the list of all available commands with their respective short "
 					"descriptions if called without parameters, otherwise shows help for "
-					"the passed commands.")
+					"the passed commands.") +
+				"<br/><br/>" +
+				tr ("Commands' variable inputs are typically shown in <em>italics</em>, "
+					"while the parts that are to be entered as is are shown in "
+					"<code>monospace</code> font. Optional arguments are typically in "
+					"[square brackets], while different options are shown like this:")
+					+ " &lt;A1|B2|C3>."
 	}
 	, Clear_
 	{

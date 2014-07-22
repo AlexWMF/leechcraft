@@ -27,78 +27,49 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#pragma once
-
-#include <QWidget>
-#include <interfaces/ihavetabs.h>
-#include "ui_composemessagetab.h"
-#include "account.h"
-
-class QSignalMapper;
-class IEditorWidget;
+#include "mailwebpage.h"
+#include <QNetworkRequest>
+#include <QtDebug>
+#include <util/xpc/util.h>
+#include <interfaces/core/ientitymanager.h>
 
 namespace LeechCraft
 {
 namespace Snails
 {
-	class ComposeMessageTab : public QWidget
-							, public ITabWidget
+	MailWebPage::MailWebPage (const ICoreProxy_ptr& proxy, QObject *parent)
+	: QWebPage { parent }
+	, Proxy_ { proxy }
 	{
-		Q_OBJECT
-		Q_INTERFACES (ITabWidget)
+	}
 
-		static QObject *S_ParentPlugin_;
-		static TabClassInfo S_TabClassInfo_;
+	bool MailWebPage::acceptNavigationRequest (QWebFrame*, const QNetworkRequest& req, QWebPage::NavigationType type)
+	{
+		const auto& url = req.url ();
+		if (type == NavigationTypeLinkClicked &&
+				url.scheme () != "snails")
+		{
+			const auto& e = Util::MakeEntity (url, {}, FromUserInitiated);
+			Proxy_->GetEntityManager ()->HandleEntity (e);
+			return false;
+		}
 
-		Ui::ComposeMessageTab Ui_;
+		if (url.scheme () == "snails")
+		{
+			if (url.host () == "attachment")
+				HandleAttachment (url);
+		}
 
-		QToolBar *Toolbar_;
-		QMenu *AccountsMenu_;
-		QMenu *AttachmentsMenu_;
-		QMenu *EditorsMenu_;
+		return false;
+	}
 
-		QSignalMapper *EditorsMapper_;
+	void MailWebPage::HandleAttachment (const QUrl& url)
+	{
+		const auto& msgId = url.queryItemValue ("msgId").toUtf8 ();
+		const auto& folder = url.queryItemValue ("folderId").split ('/');
+		const auto& attName = url.queryItemValue ("attName");
 
-		QList<QWidget*> MsgEditWidgets_;
-		QList<IEditorWidget*> MsgEdits_;
-
-		Message_ptr ReplyMessage_;
-	public:
-		static void SetParentPlugin (QObject*);
-		static void SetTabClassInfo (const TabClassInfo&);
-
-		ComposeMessageTab (QWidget* = 0);
-
-		TabClassInfo GetTabClassInfo () const;
-		QObject* ParentMultiTabs();
-		void Remove();
-		QToolBar* GetToolBar() const;
-
-		void SelectAccount (const Account_ptr&);
-		void PrepareReply (const Message_ptr&);
-	private:
-		void PrepareReplyEditor (const Message_ptr&);
-		void PrepareReplyBody (const Message_ptr&);
-
-		void SetupToolbar ();
-		void SetupEditors ();
-
-		void SelectPlainEditor ();
-		void SelectHtmlEditor ();
-
-		IEditorWidget* GetCurrentEditor () const;
-
-		void SetMessageReferences (const Message_ptr&) const;
-	private slots:
-		void handleMessageSent ();
-
-		void handleSend ();
-		void handleAddAttachment ();
-		void handleRemoveAttachment ();
-
-		void handleEditorSelected (int);
-	signals:
-		void removeTab (QWidget*);
-	};
+		emit attachmentSelected (msgId, folder, attName);
+	}
 }
 }
