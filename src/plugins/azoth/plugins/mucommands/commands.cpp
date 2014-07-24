@@ -221,12 +221,14 @@ namespace MuCommands
 			return split;
 		}
 
-		ICLEntry* ResolveEntry (const QString& name, const QHash<QString, ICLEntry*>& context, QObject *accObj)
+		ICLEntry* ResolveEntry (const QString& name, const QHash<QString, ICLEntry*>& context, QObject *accObj, ICLEntry *hint)
 		{
 			if (context.contains (name))
 				return context.value (name);
 
 			const auto acc = qobject_cast<IAccount*> (accObj);
+
+			QList<ICLEntry*> entries;
 			for (const auto entryObj : acc->GetCLEntries ())
 			{
 				const auto entry = qobject_cast<ICLEntry*> (entryObj);
@@ -234,8 +236,11 @@ namespace MuCommands
 					continue;
 
 				if (entry->GetEntryName () == name || entry->GetHumanReadableID () == name)
-					return entry;
+					entries << entry;
 			}
+
+			if (!entries.isEmpty ())
+				return entries.contains (hint) ? hint : entries.first ();
 
 			if (const auto isn = qobject_cast<ISupportNonRoster*> (accObj))
 				if (const auto entry = qobject_cast<ICLEntry*> (isn->CreateNonRosterItem (name)))
@@ -325,7 +330,7 @@ namespace MuCommands
 			for (const auto& name : nicks)
 			{
 				const auto target = ResolveEntry (name.trimmed (),
-						participants, entry->GetParentAccount ());
+						participants, entry->GetParentAccount (), entry);
 				if (!target)
 				{
 					fallback (name);
@@ -1076,7 +1081,7 @@ namespace MuCommands
 
 		if (entry->GetEntryType () == ICLEntry::EntryType::MUC)
 		{
-			const auto invitee = ResolveEntry (id, {}, entry->GetParentAccount ());
+			const auto invitee = ResolveEntry (id, {}, entry->GetParentAccount (), entry);
 			const auto& inviteeId = invitee ?
 					invitee->GetHumanReadableID () :
 					id;
@@ -1090,7 +1095,7 @@ namespace MuCommands
 		}
 		else
 		{
-			const auto mucEntry = ResolveEntry (id, {}, entry->GetParentAccount ());
+			const auto mucEntry = ResolveEntry (id, {}, entry->GetParentAccount (), entry);
 			if (!mucEntry)
 			{
 				InjectMessage (azothProxy, entry,
@@ -1115,32 +1120,57 @@ namespace MuCommands
 		return true;
 	}
 
+	namespace
+	{
+		void WhoisImpl (IProxyObject *azothProxy, ICLEntry *entry, ICLEntry *partEntry, ICLEntry *showEntry, const QString& text)
+		{
+			const auto& reqNick = text.section (' ', 1);
+
+			const auto mucEntry = qobject_cast<IMUCEntry*> (entry->GetQObject ());
+			const auto part = reqNick.isEmpty () ?
+					partEntry :
+					GetParticipants (mucEntry).value (reqNick);
+
+			if (!part)
+			{
+				InjectMessage (azothProxy, showEntry,
+						QObject::tr ("Unable to find participant %1.")
+								.arg ("<em>" + reqNick + "</em>"));
+				return;
+			}
+
+			const auto& nick = part->GetEntryName ();
+
+			const auto& rid = mucEntry->GetRealID (part->GetQObject ());
+			if (rid.isEmpty ())
+				InjectMessage (azothProxy, showEntry,
+						QObject::tr ("Unable to get real ID of %1.")
+								.arg ("<em>" + nick + "</em>"));
+			else
+				InjectMessage (azothProxy, showEntry,
+						QObject::tr ("%1's real ID: %2.")
+								.arg ("<em>" + nick + "</em>")
+								.arg ("<em>" + rid + "</em>"));
+		}
+	}
+
 	bool Whois (IProxyObject *azothProxy, ICLEntry *entry, const QString& text)
 	{
-		const auto& nick = text.section (' ', 1);
-
-		const auto mucEntry = qobject_cast<IMUCEntry*> (entry->GetQObject ());
-		const auto part = GetParticipants (mucEntry).value (nick);
-
-		if (!part)
+		switch (entry->GetEntryType ())
 		{
-			InjectMessage (azothProxy, entry,
-					QObject::tr ("Unable to find participant %1.")
-							.arg ("<em>" + nick + "</em>"));
-			return true;
+		case ICLEntry::EntryType::MUC:
+			WhoisImpl (azothProxy, entry, nullptr, entry, text);
+			break;
+		case ICLEntry::EntryType::PrivateChat:
+			WhoisImpl (azothProxy,
+					qobject_cast<ICLEntry*> (entry->GetParentCLEntry ()),
+					entry,
+					entry,
+					text);
+			break;
+		default:
+			break;
 		}
-
-		const auto& rid = mucEntry->GetRealID (part->GetQObject ());
-		if (rid.isEmpty ())
-			InjectMessage (azothProxy, entry,
-					QObject::tr ("Unable to get real ID of %1.")
-							.arg ("<em>" + nick + "</em>"));
-		else
-			InjectMessage (azothProxy, entry,
-					QObject::tr ("%1's real ID: %2.")
-							.arg ("<em>" + nick + "</em>")
-							.arg ("<em>" + rid + "</em>"));
-
 		return true;
 	}
 
