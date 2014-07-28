@@ -29,59 +29,38 @@
 
 #pragma once
 
+#include <memory>
 #include <QObject>
-#include <QDir>
-#include <QSettings>
-#include <QHash>
-#include <QSet>
-#include "message.h"
 
 namespace LeechCraft
 {
 namespace Snails
 {
+	class MailModel;
 	class Account;
+	class Message;
 
-	class AccountDatabase;
-	typedef std::shared_ptr<AccountDatabase> AccountDatabase_ptr;
+	typedef std::shared_ptr<Message> Message_ptr;
 
-	class Storage : public QObject
+	class MailModelsManager : public QObject
 	{
 		Q_OBJECT
 
-		QDir SDir_;
-		QSettings Settings_;
-		QHash<QByteArray, bool> IsMessageRead_;
+		Account * const Acc_;
 
-		QHash<Account*, AccountDatabase_ptr> AccountBases_;
-		QHash<Account*, QHash<QByteArray, Message_ptr>> PendingSaveMessages_;
-
-		QHash<QObject*, Account*> FutureWatcher2Account_;
+		QList<MailModel*> Models_;
 	public:
-		Storage (QObject* = 0);
+		MailModelsManager (Account*);
 
-		void SaveMessages (Account*, const QStringList& folders, const QList<Message_ptr>&);
-		MessageSet LoadMessages (Account*);
-		Message_ptr LoadMessage (Account*, const QStringList& folder, const QByteArray& id);
-		QList<QByteArray> LoadIDs (Account*, const QStringList& folder);
-		void RemoveMessage (Account*, const QStringList&, const QByteArray&);
+		MailModel* CreateModel ();
 
-		int GetNumMessages (Account*) const;
-		int GetNumMessages (Account*, const QStringList& folder);
-		int GetNumUnread (Account*, const QStringList& folder);
-		bool HasMessagesIn (Account*) const;
+		void ShowFolder (const QStringList&, MailModel*);
 
-		bool IsMessageRead (Account*, const QStringList& folder, const QByteArray&);
-	private:
-		void RemoveMessageFile (Account*, const QStringList&, const QByteArray&);
-	private:
-		QDir DirForAccount (Account*) const;
-		AccountDatabase_ptr BaseForAccount (Account*);
-
-		void AddMessage (Message_ptr, Account*);
-		void UpdateCaches (Message_ptr);
+		void Append (const QList<Message_ptr>&);
+		void Update (const QList<Message_ptr>&);
+		void Remove (const QList<QByteArray>&);
 	private slots:
-		void handleMessagesSaved ();
+		void handleModelDestroyed (QObject*);
 	};
 }
 }

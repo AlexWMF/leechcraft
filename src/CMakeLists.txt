@@ -130,11 +130,7 @@ if (CMAKE_INSTALL_PREFIX AND NOT STANDARD_PREFIX)
 	add_definitions (-DINSTALL_PREFIX="${CMAKE_INSTALL_PREFIX}")
 endif ()
 
-if (NOT CMAKE_VERSION VERSION_LESS 2.8.6)
-	message (STATUS "CMake 2.8.6 or greater found, enabling automoc...")
-	set (CMAKE_AUTOMOC TRUE)
-	set (LC_NO_MOC TRUE)
-endif ()
+set (CMAKE_AUTOMOC TRUE)
 
 set (LEECHCRAFT_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
 
@@ -296,6 +292,10 @@ function (CreateTrsUpTarget PlugName Langs Sources Forms Xml)
 				COMMAND "rm" "-f" "dummy.cpp"
 				WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" VERBATIM)
 	endforeach ()
+	add_custom_target (${_basename}_ts
+			${QT_LUPDATE_EXECUTABLE} "-noobsolete" ${Sources} ${Forms} "-ts" "${_basename}_\${TSLANG}.ts"
+			COMMAND "rm" "-f" "dummy.cpp"
+			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 
 	if (_xmlLength)
 		add_custom_target (${_basename}_ts_convert_settings
@@ -304,6 +304,7 @@ function (CreateTrsUpTarget PlugName Langs Sources Forms Xml)
 		foreach (_LANG ${Langs})
 			add_dependencies (${_basename}_ts_${_LANG} ${_basename}_ts_convert_settings)
 		endforeach ()
+		add_dependencies (${_basename}_ts ${_basename}_ts_convert_settings)
 	endif ()
 
 	if (ARGN)
@@ -316,6 +317,7 @@ function (CreateTrsUpTarget PlugName Langs Sources Forms Xml)
 				foreach (_LANG ${Langs})
 					add_dependencies (${_basename}_ts_${_LANG} ${_argn})
 				endforeach ()
+				add_dependencies (${_basename}_ts ${_argn})
 			else ()
 				string (COMPARE EQUAL ${_argn} "DEPENDS" _isDepends)
 			endif ()

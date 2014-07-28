@@ -34,6 +34,7 @@
 #include <QFile>
 #include <QSslSocket>
 #include <QtDebug>
+#include <QTimer>
 #include <vmime/security/defaultAuthenticator.hpp>
 #include <vmime/security/cert/defaultCertificateVerifier.hpp>
 #include <vmime/security/cert/X509Certificate.hpp>
@@ -138,6 +139,13 @@ namespace Snails
 					SIGNAL (messagesChanged (QStringList, QList<int>)),
 					this,
 					SLOT (handleMessagesChanged (QStringList, QList<int>)));
+
+		auto noopTimer = new QTimer { this };
+		connect (noopTimer,
+				SIGNAL (timeout ()),
+				this,
+				SLOT (sendNoop ()));
+		noopTimer->start (60 * 1000);
 	}
 
 	vmime::shared_ptr<vmime::net::store> AccountThreadWorker::MakeStore ()
@@ -550,7 +558,7 @@ namespace Snails
 	}
 
 	void AccountThreadWorker::FetchMessagesIMAP (const QList<QStringList>& origFolders,
-			vmime::shared_ptr<vmime::net::store> store, const QByteArray& last)
+			const QByteArray& last)
 	{
 		for (const auto& folder : origFolders)
 		{
@@ -874,6 +882,18 @@ namespace Snails
 			set.addRange (vmime::net::numberMessageRange { num });
 	}
 
+	void AccountThreadWorker::sendNoop ()
+	{
+		if (CachedStore_)
+			CachedStore_->noop ();
+	}
+
+	void AccountThreadWorker::flushSockets ()
+	{
+		CachedFolders_.clear ();
+		CachedStore_.reset ();
+	}
+
 	void AccountThreadWorker::synchronize (const QList<QStringList>& folders, const QByteArray& last)
 	{
 		switch (A_->InType_)
@@ -885,7 +905,7 @@ namespace Snails
 		{
 			const auto& store = MakeStore ();
 			SyncIMAPFolders (store);
-			FetchMessagesIMAP (folders, store, last);
+			FetchMessagesIMAP (folders, last);
 			break;
 		}
 		case Account::InType::Maildir:
@@ -899,11 +919,11 @@ namespace Snails
 		if (!netFolder)
 			return;
 
-		const auto count = netFolder->getStatus ()->getMessageCount ();
-
+		const auto& status = netFolder->getStatus ();
 		QMetaObject::invokeMethod (handler,
 				slot,
-				Q_ARG (int, count),
+				Q_ARG (int, status->getMessageCount ()),
+				Q_ARG (int, status->getUnseenCount ()),
 				Q_ARG (QStringList, folder));
 	}
 

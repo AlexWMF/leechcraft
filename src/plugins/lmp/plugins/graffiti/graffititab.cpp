@@ -194,6 +194,27 @@ namespace Graffiti
 		Ui_.Genre_->AddSelector (genreMgr);
 
 		new Util::ClearLineEditAddon (CoreProxy_, Ui_.Genre_, genreMgr);
+
+		connect (Ui_.ArtistSetAll_,
+				SIGNAL (released ()),
+				this,
+				SLOT (on_Artist__textChanged ()));
+		connect (Ui_.AlbumSetAll_,
+				SIGNAL (released ()),
+				this,
+				SLOT (on_Album__textChanged ()));
+		connect (Ui_.TitleSetAll_,
+				SIGNAL (released ()),
+				this,
+				SLOT (on_Title__textChanged ()));
+		connect (Ui_.GenreSetAll_,
+				SIGNAL (released ()),
+				this,
+				SLOT (on_Genre__textChanged ()));
+		connect (Ui_.YearSetAll_,
+				SIGNAL (released ()),
+				this,
+				SLOT (on_Year__valueChanged ()));
 	}
 
 	void GraffitiTab::SetupViews ()
@@ -299,23 +320,27 @@ namespace Graffiti
 		settings.endGroup ();
 	}
 
-	void GraffitiTab::on_Artist__textChanged (const QString& artist)
+	void GraffitiTab::on_Artist__textChanged ()
 	{
+		const auto& artist = Ui_.Artist_->text ();
 		UpdateData (artist, [] (MediaInfo& info) -> QString& { return info.Artist_; });
 	}
 
-	void GraffitiTab::on_Album__textChanged (const QString& album)
+	void GraffitiTab::on_Album__textChanged ()
 	{
+		const auto& album = Ui_.Album_->text ();
 		UpdateData (album, [] (MediaInfo& info) -> QString& { return info.Album_; });
 	}
 
-	void GraffitiTab::on_Title__textChanged (const QString& title)
+	void GraffitiTab::on_Title__textChanged ()
 	{
+		const auto& title = Ui_.Title_->text ();
 		UpdateData (title, [] (MediaInfo& info) -> QString& { return info.Title_; });
 	}
 
-	void GraffitiTab::on_Genre__textChanged (const QString& genreString)
+	void GraffitiTab::on_Genre__textChanged ()
 	{
+		const auto& genreString = Ui_.Genre_->text ();
 		auto genres = genreString.split ('/', QString::SkipEmptyParts);
 		for (auto& genre : genres)
 			genre = genre.trimmed ();
@@ -323,9 +348,50 @@ namespace Graffiti
 		UpdateData (genres, [] (MediaInfo& info) -> QStringList& { return info.Genres_; });
 	}
 
-	void GraffitiTab::on_Year__valueChanged (int year)
+	void GraffitiTab::on_Year__valueChanged ()
 	{
+		const auto year = Ui_.Year_->value ();
 		UpdateData (year, [] (MediaInfo& info) -> int& { return info.Year_; });
+	}
+
+	void GraffitiTab::on_TrackNumber__valueChanged ()
+	{
+		const auto number = Ui_.TrackNumber_->value ();
+
+		if (IsChangingCurrent_)
+			return;
+
+		const auto& index = Ui_.FilesList_->currentIndex ();
+		if (!index.isValid ())
+			return;
+
+		const auto& infoData = index.data (FilesModel::Roles::MediaInfoRole);
+		auto info = infoData.value<MediaInfo> ();
+		info.TrackNumber_ = number;
+		FilesModel_->UpdateInfo (index, info);
+
+		Save_->setEnabled (true);
+		Revert_->setEnabled (true);
+	}
+
+	void GraffitiTab::on_TrackNumberAutoFill__released ()
+	{
+		QMap<QString, int> album2counter;
+
+		const auto& selected = Ui_.FilesList_->selectionModel ()->selectedRows ();
+		for (const auto& index : selected)
+		{
+			const auto& infoData = index.data (FilesModel::Roles::MediaInfoRole);
+			auto info = infoData.value<MediaInfo> ();
+			info.TrackNumber_ = ++album2counter [info.Album_];
+			FilesModel_->UpdateInfo (index, info);
+		}
+
+		if (!selected.isEmpty ())
+		{
+			Save_->setEnabled (true);
+			Revert_->setEnabled (true);
+		}
 	}
 
 	void GraffitiTab::save ()
@@ -360,6 +426,7 @@ namespace Graffiti
 			tag->setTitle (toTLStr (newInfo.Title_));
 			tag->setYear (newInfo.Year_);
 			tag->setGenre (toTLStr (newInfo.Genres_.join (" / ")));
+			tag->setTrack (newInfo.TrackNumber_);
 
 			if (!file.save ())
 				qWarning () << Q_FUNC_INFO
@@ -549,6 +616,8 @@ namespace Graffiti
 		Ui_.Genre_->setText (info.Genres_.join (" / "));
 
 		Ui_.Year_->setValue (info.Year_);
+
+		Ui_.TrackNumber_->setValue (info.TrackNumber_);
 
 		IsChangingCurrent_ = false;
 	}

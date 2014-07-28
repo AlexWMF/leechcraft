@@ -57,25 +57,16 @@ namespace Snails
 		QToolBar * const TabToolbar_;
 		QToolBar * const MsgToolbar_;
 
-		QAction *MsgReply_;
-		QAction *MsgMarkUnread_;
-
 		QMenu *MsgCopy_;
-		QToolButton *MsgCopyButton_;
-
 		QMenu *MsgMove_;
-		QToolButton *MsgMoveButton_;
-
-		QAction *MsgRemove_;
 
 		QMenu *MsgAttachments_;
 		QToolButton *MsgAttachmentsButton_;
 
-		QAction *MsgViewHeaders_;
-
 		TabClassInfo TabClass_;
 		QObject *PMT_;
 
+		std::shared_ptr<MailModel> MailModel_;
 		QSortFilterProxyModel *MailSortFilterModel_;
 		Account_ptr CurrAcc_;
 		Message_ptr CurrMsg_;
@@ -87,6 +78,8 @@ namespace Snails
 		void Remove ();
 		QToolBar* GetToolBar () const;
 	private:
+		void FillCommonActions ();
+		void FillMailActions ();
 		void FillTabToolbarActions ();
 		QList<QByteArray> GetSelectedIds () const;
 
@@ -97,7 +90,7 @@ namespace Snails
 		void handleCurrentTagChanged (const QModelIndex&);
 		void handleMailSelected ();
 
-		void handleFoldersUpdated ();
+		void rebuildOpsToFolders ();
 
 		void handleReply ();
 		void handleCopyMultipleFolders ();
@@ -111,6 +104,7 @@ namespace Snails
 		void handleAttachment ();
 		void handleAttachment (const QByteArray&, const QStringList&, const QString&);
 		void handleFetchNewMail ();
+		void handleRefreshFolder ();
 
 		void handleMessageBodyFetched (Message_ptr);
 	signals:

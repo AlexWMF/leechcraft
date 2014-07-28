@@ -27,72 +27,87 @@
  * DEALINGS IN THE SOFTWARE.
  **********************************************************************/
 
-#pragma once
-
-#include <QObject>
-#include <QString>
-#include <QMutex>
-#include <QFutureInterface>
-#include "valuedmetaargument.h"
+#include "mailmodelsmanager.h"
+#include "account.h"
+#include "mailmodel.h"
+#include "core.h"
+#include "storage.h"
 
 namespace LeechCraft
 {
 namespace Snails
 {
-	struct TaskQueueItem
+	MailModelsManager::MailModelsManager (Account *acc)
+	: QObject { acc }
+	, Acc_ { acc }
 	{
-		enum class Priority
+	}
+
+	MailModel* MailModelsManager::CreateModel ()
+	{
+		auto model = new MailModel { Acc_ };
+		Models_ << model;
+
+		connect (model,
+				SIGNAL (destroyed (QObject*)),
+				this,
+				SLOT (handleModelDestroyed (QObject*)));
+
+		return model;
+	}
+
+	void MailModelsManager::ShowFolder (const QStringList& path, MailModel *mailModel)
+	{
+		if (!Models_.contains (mailModel))
 		{
-			Lowest = -50,
-			Low = -10,
-			Normal = 0,
-			High = 10,
-			Highest = 50
-		};
+			qWarning () << Q_FUNC_INFO
+					<< "unmanaged model"
+					<< mailModel
+					<< Models_;
+			return;
+		}
 
-		int Priority_ = static_cast<int> (Priority::Normal);
+		mailModel->Clear ();
 
-		QByteArray Method_;
-		QList<ValuedMetaArgument> Args_;
+		qDebug () << Q_FUNC_INFO << path;
+		if (path.isEmpty ())
+			return;
 
-		QByteArray ID_;
+		mailModel->SetFolder (path);
 
-		std::shared_ptr<QFutureInterface<void>> Promise_ = std::make_shared<QFutureInterface<void>> ();
+		QList<Message_ptr> messages;
+		const auto& ids = Core::Instance ().GetStorage ()->LoadIDs (Acc_, path);
+		for (const auto& id : ids)
+			messages << Core::Instance ().GetStorage ()->LoadMessage (Acc_, path, id);
 
-		TaskQueueItem ();
-		TaskQueueItem (const QByteArray&,
-				const QList<ValuedMetaArgument>&, const QByteArray& = {});
-		TaskQueueItem (int priority, const QByteArray&,
-				const QList<ValuedMetaArgument>&, const QByteArray& = {});
-		TaskQueueItem (Priority priority, const QByteArray&,
-				const QList<ValuedMetaArgument>&, const QByteArray& = {});
-	};
+		mailModel->Append (messages);
 
-	bool operator== (const TaskQueueItem&, const TaskQueueItem&);
+		Acc_->Synchronize (path, ids.isEmpty () ? QByteArray {} : ids.last ());
+	}
 
-	class AccountThreadWorker;
-
-	class TaskQueueManager : public QObject
+	void MailModelsManager::Append (const QList<Message_ptr>& messages)
 	{
-		Q_OBJECT
+		for (const auto model : Models_)
+			model->Append (messages);
+	}
 
-		AccountThreadWorker * const ATW_;
+	void MailModelsManager::Update (const QList<Message_ptr>& messages)
+	{
+		for (const auto model : Models_)
+			for (const auto& msg : messages)
+				model->Update (msg);
+	}
 
-		mutable QMutex ItemsMutex_;
-		QList<TaskQueueItem> Items_;
-	public:
-		TaskQueueManager (AccountThreadWorker*);
+	void MailModelsManager::Remove (const QList<QByteArray>& ids)
+	{
+		for (const auto model : Models_)
+			for (const auto& id : ids)
+				model->Remove (id);
+	}
 
-		void AddTasks (QList<TaskQueueItem>);
-		bool HasItems () const;
-		TaskQueueItem PopItem ();
-	private:
-		void HandleItem (const TaskQueueItem&, int recLevel = 0);
-	private slots:
-		void rotateTaskQueue ();
-	signals:
-		void gotTask ();
-	};
+	void MailModelsManager::handleModelDestroyed (QObject *modelObj)
+	{
+		Models_.removeAll (static_cast<MailModel*> (modelObj));
+	}
 }
 }
-

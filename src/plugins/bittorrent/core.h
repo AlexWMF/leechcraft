@@ -169,7 +169,8 @@ namespace BitTorrent
 			ColumnDownSpeed,
 			ColumnUpSpeed,
 			ColumnLeechers,
-			ColumnSeeders
+			ColumnSeeders,
+			ColumnUploaded
 		};
 		enum AddType
 		{
@@ -184,7 +185,8 @@ namespace BitTorrent
 		};
 		enum Roles
 		{
-			FullLengthText = Qt::UserRole + 1
+			FullLengthText = Qt::UserRole + 1,
+			SortRole
 		};
 
 		static Core* Instance ();

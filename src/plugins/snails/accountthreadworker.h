@@ -88,8 +88,7 @@ namespace Snails
 		Message_ptr FromHeaders (const vmime::shared_ptr<vmime::net::message>&) const;
 		void FetchMessagesPOP3 ();
 
-		void FetchMessagesIMAP (const QList<QStringList>&,
-				vmime::shared_ptr<vmime::net::store>, const QByteArray&);
+		void FetchMessagesIMAP (const QList<QStringList>&, const QByteArray&);
 		QList<Message_ptr> FetchVmimeMessages (MessageVector_t, const VmimeFolder_ptr&, const QStringList&);
 		void FetchMessagesInFolder (const QStringList&, const VmimeFolder_ptr&, const QByteArray&);
 
@@ -98,7 +97,11 @@ namespace Snails
 		ProgressListener* MkPgListener (const QString&);
 	private slots:
 		void handleMessagesChanged (const QStringList& folder, const QList<int>& numbers);
+
+		void sendNoop ();
 	public slots:
+		void flushSockets ();
+
 		void synchronize (const QList<QStringList>&, const QByteArray& last);
 
 		void getMessageCount (const QStringList& folder, QObject *handler, const QByteArray& slot);

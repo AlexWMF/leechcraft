@@ -49,6 +49,8 @@
 #include "mailsortmodel.h"
 #include "headersviewwidget.h"
 #include "mailwebpage.h"
+#include "foldersmodel.h"
+#include "mailmodelsmanager.h"
 
 namespace LeechCraft
 {
@@ -138,9 +140,9 @@ namespace Snails
 		return TabToolbar_;
 	}
 
-	void MailTab::FillTabToolbarActions ()
+	void MailTab::FillCommonActions ()
 	{
-		QAction *fetch = new QAction (tr ("Fetch new mail"), this);
+		const auto fetch = new QAction (tr ("Fetch new mail"), this);
 		fetch->setProperty ("ActionIcon", "mail-receive");
 		TabToolbar_->addAction (fetch);
 		connect (fetch,
@@ -149,8 +151,18 @@ namespace Snails
 				SLOT (handleFetchNewMail ()));
 		TabToolbar_->addAction (fetch);
 
-		TabToolbar_->addSeparator ();
+		const auto refresh = new QAction (tr ("Refresh the folder"), this);
+		refresh->setProperty ("ActionIcon", "view-refresh");
+		TabToolbar_->addAction (refresh);
+		connect (refresh,
+				SIGNAL (triggered ()),
+				this,
+				SLOT (handleRefreshFolder ()));
+		TabToolbar_->addAction (refresh);
+	}
 
+	void MailTab::FillMailActions ()
+	{
 		auto registerMailAction = [this] (QObject *obj)
 		{
 			connect (this,
@@ -159,14 +171,14 @@ namespace Snails
 					SLOT (setEnabled (bool)));
 		};
 
-		MsgReply_ = new QAction (tr ("Reply..."), this);
-		MsgReply_->setProperty ("ActionIcon", "mail-reply-sender");
-		connect (MsgReply_,
+		const auto msgReply = new QAction (tr ("Reply..."), this);
+		msgReply->setProperty ("ActionIcon", "mail-reply-sender");
+		connect (msgReply,
 				SIGNAL (triggered ()),
 				this,
 				SLOT (handleReply ()));
-		TabToolbar_->addAction (MsgReply_);
-		registerMailAction (MsgReply_);
+		TabToolbar_->addAction (msgReply);
+		registerMailAction (msgReply);
 
 		MsgAttachments_ = new QMenu (tr ("Attachments"));
 		MsgAttachmentsButton_ = new QToolButton;
@@ -179,13 +191,13 @@ namespace Snails
 
 		MsgCopy_ = new QMenu (tr ("Copy messages"));
 
-		MsgCopyButton_ = new QToolButton;
-		MsgCopyButton_->setMenu (MsgCopy_);
-		MsgCopyButton_->setProperty ("ActionIcon", "edit-copy");
-		MsgCopyButton_->setPopupMode (QToolButton::InstantPopup);
-		TabToolbar_->addWidget (MsgCopyButton_);
+		const auto msgCopyButton = new QToolButton;
+		msgCopyButton->setMenu (MsgCopy_);
+		msgCopyButton->setProperty ("ActionIcon", "edit-copy");
+		msgCopyButton->setPopupMode (QToolButton::InstantPopup);
+		TabToolbar_->addWidget (msgCopyButton);
 
-		registerMailAction (MsgCopyButton_);
+		registerMailAction (msgCopyButton);
 
 		MsgMove_ = new QMenu (tr ("Move messages"));
 		connect (MsgMove_,
@@ -193,44 +205,51 @@ namespace Snails
 				this,
 				SLOT (handleMoveMessages (QAction*)));
 
-		MsgMoveButton_ = new QToolButton;
-		MsgMoveButton_->setMenu (MsgMove_);
-		MsgMoveButton_->setProperty ("ActionIcon", "transform-move");
-		MsgMoveButton_->setPopupMode (QToolButton::InstantPopup);
-		TabToolbar_->addWidget (MsgMoveButton_);
+		const auto msgMoveButton = new QToolButton;
+		msgMoveButton->setMenu (MsgMove_);
+		msgMoveButton->setProperty ("ActionIcon", "transform-move");
+		msgMoveButton->setPopupMode (QToolButton::InstantPopup);
+		TabToolbar_->addWidget (msgMoveButton);
 
-		registerMailAction (MsgMoveButton_);
+		registerMailAction (msgMoveButton);
 
-		MsgMarkUnread_ = new QAction (tr ("Mark as unread"), this);
-		MsgMarkUnread_->setProperty ("ActionIcon", "mail-mark-unread");
-		connect (MsgMarkUnread_,
+		const auto msgMarkUnread = new QAction (tr ("Mark as unread"), this);
+		msgMarkUnread->setProperty ("ActionIcon", "mail-mark-unread");
+		connect (msgMarkUnread,
 				SIGNAL (triggered ()),
 				this,
 				SLOT (handleMarkMsgUnread ()));
-		TabToolbar_->addAction (MsgMarkUnread_);
-		registerMailAction (MsgMarkUnread_);
+		TabToolbar_->addAction (msgMarkUnread);
+		registerMailAction (msgMarkUnread);
 
-		MsgRemove_ = new QAction (tr ("Delete messages"), this);
-		MsgRemove_->setProperty ("ActionIcon", "list-remove");
-		connect (MsgRemove_,
+		const auto msgRemove = new QAction (tr ("Delete messages"), this);
+		msgRemove->setProperty ("ActionIcon", "list-remove");
+		connect (msgRemove,
 				SIGNAL (triggered ()),
 				this,
 				SLOT (handleRemoveMsgs ()));
-		TabToolbar_->addAction (MsgRemove_);
-		registerMailAction (MsgRemove_);
+		TabToolbar_->addAction (msgRemove);
+		registerMailAction (msgRemove);
 
 		TabToolbar_->addSeparator ();
 
-		MsgViewHeaders_ = new QAction (tr ("View headers"), this);
-		MsgViewHeaders_->setProperty ("ActionIcon", "text-plain");
-		connect (MsgViewHeaders_,
+		const auto msgViewHeaders = new QAction (tr ("View headers"), this);
+		msgViewHeaders->setProperty ("ActionIcon", "text-plain");
+		connect (msgViewHeaders,
 				SIGNAL (triggered ()),
 				this,
 				SLOT (handleViewHeaders ()));
-		TabToolbar_->addAction (MsgViewHeaders_);
-		registerMailAction (MsgViewHeaders_);
+		TabToolbar_->addAction (msgViewHeaders);
+		registerMailAction (msgViewHeaders);
 
 		SetMsgActionsEnabled (false);
+	}
+
+	void MailTab::FillTabToolbarActions ()
+	{
+		FillCommonActions ();
+		TabToolbar_->addSeparator ();
+		FillMailActions ();
 	}
 
 	QList<QByteArray> MailTab::GetSelectedIds () const
@@ -260,7 +279,7 @@ namespace Snails
 			return {};
 
 		auto folders = CurrAcc_->GetFolderManager ()->GetFolders ();
-		const auto& curFolder = CurrAcc_->GetMailModel ()->GetCurrentFolder ();
+		const auto& curFolder = MailModel_->GetCurrentFolder ();
 
 		const auto curPos = std::find_if (folders.begin (), folders.end (),
 				[&curFolder] (const Folder& other) { return other.Path_ == curFolder; });
@@ -282,11 +301,15 @@ namespace Snails
 					0,
 					this,
 					0);
+
+			MailSortFilterModel_->setSourceModel (nullptr);
+			MailModel_.reset ();
+			CurrAcc_.reset ();
+
+			rebuildOpsToFolders ();
 		}
 
 		CurrAcc_ = Core::Instance ().GetAccount (idx);
-		handleFoldersUpdated ();
-
 		if (!CurrAcc_)
 			return;
 
@@ -295,7 +318,8 @@ namespace Snails
 				this,
 				SLOT (handleMessageBodyFetched (Message_ptr)));
 
-		MailSortFilterModel_->setSourceModel (CurrAcc_->GetMailModel ());
+		MailModel_.reset (CurrAcc_->GetMailModelsManager ()->CreateModel ());
+		MailSortFilterModel_->setSourceModel (MailModel_.get ());
 		MailSortFilterModel_->setDynamicSortFilter (true);
 
 		if (Ui_.TagsTree_->selectionModel ())
@@ -311,7 +335,8 @@ namespace Snails
 		connect (fm,
 				SIGNAL (foldersUpdated ()),
 				this,
-				SLOT (handleFoldersUpdated ()));
+				SLOT (rebuildOpsToFolders ()));
+		rebuildOpsToFolders ();
 	}
 
 	namespace
@@ -322,6 +347,9 @@ namespace Snails
 
 			for (const auto& pair : adds)
 			{
+				if (pair.second.isEmpty ())
+					continue;
+
 				const bool hasName = !pair.first.isEmpty ();
 
 				QString thisStr;
@@ -344,11 +372,12 @@ namespace Snails
 
 	void MailTab::handleCurrentTagChanged (const QModelIndex& sidx)
 	{
-		CurrAcc_->ShowFolder (sidx);
+		const auto& folder = sidx.data (FoldersModel::Role::FolderPath).toStringList ();
+		CurrAcc_->GetMailModelsManager ()->ShowFolder (folder, MailModel_.get ());
 		Ui_.MailTree_->setCurrentIndex ({});
 
 		handleMailSelected ();
-		handleFoldersUpdated ();
+		rebuildOpsToFolders ();
 	}
 
 	namespace
@@ -364,6 +393,30 @@ namespace Snails
 			result.replace ("$Text", palette.color (QPalette::ColorRole::Text).name ());
 			result.replace ("$LinkVisited", palette.color (QPalette::ColorRole::LinkVisited).name ());
 			result.replace ("$Link", palette.color (QPalette::ColorRole::Link).name ());
+
+			result += R"delim(
+						html, body {
+							width: 100%;
+							height: 100%;
+							overflow: hidden;
+							margin: 0 !important;
+						}
+
+						.header {
+							top: 0;
+							left: 0;
+							right: 0;
+							position: fixed;
+						}
+
+						.body {
+							width: 100%;
+							bottom: 0;
+							position: absolute;
+							overflow: auto;
+						}
+					)delim";
+
 			return result;
 		}
 
@@ -378,7 +431,7 @@ namespace Snails
 			const auto& extData = Util::ExtensionsData::Instance ();
 			for (const auto& attach : attachments)
 			{
-				result += "<div class='attachment'>";
+				result += "<span class='attachment'>";
 
 				QUrl linkUrl { "snails://attachment/" };
 				linkUrl.addQueryItem ("msgId", msg->GetFolderID ());
@@ -392,7 +445,7 @@ namespace Snails
 				const auto& icon = extData.GetMimeIcon (mimeType);
 				if (!icon.isNull ())
 				{
-					const auto& iconData = Util::GetAsBase64Src (icon.pixmap (32, 32).toImage ());
+					const auto& iconData = Util::GetAsBase64Src (icon.pixmap (16, 16).toImage ());
 
 					result += "<img class='attachMime' style='float:left' src='" + iconData + "' alt='" + mimeType + "' />";
 				}
@@ -405,7 +458,7 @@ namespace Snails
 				result += " &mdash; " + Util::MakePrettySize (attach.GetSize ());
 
 				result += "</a></span>";
-				result += "</div>";
+				result += "</span>";
 			}
 
 			result += "</div>";
@@ -417,10 +470,25 @@ namespace Snails
 			QString html = "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">";
 			html += "<html xmlns='http://www.w3.org/1999/xhtml'><head><title>Message</title><style>";
 			html += GetStyle ();
-			html += "</style></head><body><div class='header'>";
+			html += "</style>";
+			html += R"d(
+						<script language='javascript'>
+							function resizeBody() {
+								var headHeight = document.getElementById('msgHeader').offsetHeight;
+
+								var bodyElem = document.getElementById('msgBody');
+								bodyElem.style.top = headHeight + "px";
+							}
+							function setupResize() {
+								window.onresize = resizeBody;
+								resizeBody();
+							}
+						</script>
+					)d";
+			html += "</head><body onload='setupResize()'><header class='header' id='msgHeader'>";
 			auto addField = [&html] (const QString& cssClass, const QString& name, const QString& text)
 			{
-				if (!text.isEmpty ())
+				if (!text.trimmed ().isEmpty ())
 					html += "<span class='field " + cssClass + "'><span class='fieldName'>" +
 							name + ": </span>" + text + "</span><br />";
 			};
@@ -432,12 +500,13 @@ namespace Snails
 			addField ("cc", MailTab::tr ("Copy"), HTMLize (msg->GetAddresses (Message::Address::Cc)));
 			addField ("bcc", MailTab::tr ("Blind copy"), HTMLize (msg->GetAddresses (Message::Address::Bcc)));
 			addField ("date", MailTab::tr ("Date"), msg->GetDate ().toString ());
+			html += AttachmentsToHtml (msg, msg->GetAttachments ());
 
 			const auto& htmlBody = msg->IsFullyFetched () ?
 					msg->GetHTMLBody () :
 					"<em>" + MailTab::tr ("Fetching the message...") + "</em>";
 
-			html += "</div><div class='body'>";
+			html += "</header><div class='body' id='msgBody'>";
 
 			if (!htmlBody.isEmpty ())
 				html += htmlBody;
@@ -460,7 +529,6 @@ namespace Snails
 			}
 
 			html += "</div>";
-			html += AttachmentsToHtml (msg, msg->GetAttachments ());
 			html += "</body></html>";
 
 			return html;
@@ -490,7 +558,7 @@ namespace Snails
 
 		const auto& idx = MailSortFilterModel_->mapToSource (sidx);
 		const auto& id = idx.sibling (idx.row (), 0).data (MailModel::MailRole::ID).toByteArray ();
-		const auto& folder = CurrAcc_->GetMailModel ()->GetCurrentFolder ();
+		const auto& folder = MailModel_->GetCurrentFolder ();
 
 		Message_ptr msg;
 		try
@@ -538,7 +606,7 @@ namespace Snails
 		CurrMsg_ = msg;
 	}
 
-	void MailTab::handleFoldersUpdated ()
+	void MailTab::rebuildOpsToFolders ()
 	{
 		MsgCopy_->clear ();
 		MsgMove_->clear ();
@@ -619,7 +687,7 @@ namespace Snails
 		if (selectedPaths.isEmpty ())
 			return;
 
-		CurrAcc_->CopyMessages (ids, CurrAcc_->GetMailModel ()->GetCurrentFolder (), selectedPaths);
+		CurrAcc_->CopyMessages (ids, MailModel_->GetCurrentFolder (), selectedPaths);
 	}
 
 	void MailTab::handleCopyMessages (QAction *action)
@@ -632,7 +700,7 @@ namespace Snails
 			return;
 
 		const auto& ids = GetSelectedIds ();
-		CurrAcc_->CopyMessages (ids, CurrAcc_->GetMailModel ()->GetCurrentFolder (), { folderPath });
+		CurrAcc_->CopyMessages (ids, MailModel_->GetCurrentFolder (), { folderPath });
 	}
 
 	void MailTab::handleMoveMultipleFolders ()
@@ -652,7 +720,7 @@ namespace Snails
 		if (selectedPaths.isEmpty ())
 			return;
 
-		CurrAcc_->MoveMessages (ids, CurrAcc_->GetMailModel ()->GetCurrentFolder (), selectedPaths);
+		CurrAcc_->MoveMessages (ids, MailModel_->GetCurrentFolder (), selectedPaths);
 	}
 
 	void MailTab::handleMoveMessages (QAction *action)
@@ -665,7 +733,7 @@ namespace Snails
 			return;
 
 		const auto& ids = GetSelectedIds ();
-		CurrAcc_->MoveMessages (ids, CurrAcc_->GetMailModel ()->GetCurrentFolder (), { folderPath });
+		CurrAcc_->MoveMessages (ids, MailModel_->GetCurrentFolder (), { folderPath });
 	}
 
 	void MailTab::handleMarkMsgUnread ()
@@ -674,7 +742,7 @@ namespace Snails
 			return;
 
 		const auto& ids = GetSelectedIds ();
-		CurrAcc_->SetReadStatus (false, ids, CurrAcc_->GetMailModel ()->GetCurrentFolder ());
+		CurrAcc_->SetReadStatus (false, ids, MailModel_->GetCurrentFolder ());
 	}
 
 	void MailTab::handleRemoveMsgs ()
@@ -683,7 +751,7 @@ namespace Snails
 			return;
 
 		const auto& ids = GetSelectedIds ();
-		CurrAcc_->DeleteMessages (ids, CurrAcc_->GetMailModel ()->GetCurrentFolder ());
+		CurrAcc_->DeleteMessages (ids, MailModel_->GetCurrentFolder ());
 	}
 
 	void MailTab::handleViewHeaders ()
@@ -691,10 +759,9 @@ namespace Snails
 		if (!CurrAcc_)
 			return;
 
-		const auto model = CurrAcc_->GetMailModel ();
 		for (const auto& id : GetSelectedIds ())
 		{
-			const auto& msg = model->GetMessage (id);
+			const auto& msg = MailModel_->GetMessage (id);
 			if (!msg)
 			{
 				qWarning () << Q_FUNC_INFO
@@ -743,6 +810,14 @@ namespace Snails
 	{
 		for (const auto acc : Core::Instance ().GetAccounts ())
 			acc->Synchronize ();
+	}
+
+	void MailTab::handleRefreshFolder ()
+	{
+		if (!CurrAcc_)
+			return;
+
+		CurrAcc_->Synchronize (MailModel_->GetCurrentFolder (), {});
 	}
 
 	void MailTab::handleMessageBodyFetched (Message_ptr msg)

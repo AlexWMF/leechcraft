@@ -53,6 +53,7 @@ namespace Snails
 	class AccountFolderManager;
 	class MailModel;
 	class FoldersModel;
+	class MailModelsManager;
 	struct Folder;
 
 	class Account : public QObject
@@ -73,7 +74,6 @@ namespace Snails
 		QString Login_;
 		bool UseSASL_;
 		bool SASLRequired_;
-
 	public:
 		enum class SecurityType
 		{
@@ -126,7 +126,7 @@ namespace Snails
 		AccountFolderManager *FolderManager_;
 		FoldersModel *FoldersModel_;
 
-		MailModel * const MailModel_;
+		MailModelsManager * const MailModelsManager_;
 	public:
 		Account (QObject* = 0);
 
@@ -136,10 +136,9 @@ namespace Snails
 		QString GetType () const;
 
 		AccountFolderManager* GetFolderManager () const;
-		MailModel* GetMailModel () const;
+		MailModelsManager* GetMailModelsManager () const;
 		QAbstractItemModel* GetFoldersModel () const;
 
-		void ShowFolder (const QModelIndex&);
 		void Synchronize ();
 		void Synchronize (const QStringList&, const QByteArray&);
 
@@ -153,8 +152,6 @@ namespace Snails
 		void CopyMessages (const QList<QByteArray>& ids, const QStringList& from, const QList<QStringList>& to);
 		void MoveMessages (const QList<QByteArray>& ids, const QStringList& from, const QList<QStringList>& to);
 		void DeleteMessages (const QList<QByteArray>& ids, const QStringList& folder);
-
-		void Update (const Message_ptr&);
 
 		QByteArray Serialize () const;
 		void Deserialize (const QByteArray&);
@@ -172,6 +169,8 @@ namespace Snails
 		QString BuildOutURL ();
 		QString GetPassImpl (Direction);
 		QByteArray GetStoreID (Direction) const;
+
+		void UpdateFolderCount (const QStringList&);
 	private slots:
 		void buildInURL (QString*);
 		void buildOutURL (QString*);
@@ -183,7 +182,7 @@ namespace Snails
 		void handleMessagesRemoved (const QList<QByteArray>&, const QStringList&);
 
 		void handleFolderSyncFinished (const QStringList&, const QByteArray&);
-		void handleMessageCountFetched (int, const QStringList&);
+		void handleMessageCountFetched (int, int, const QStringList&);
 
 		void handleGotFolders (const QList<LeechCraft::Snails::Folder>&);
 		void handleFoldersUpdated ();
