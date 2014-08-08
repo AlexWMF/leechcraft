@@ -34,21 +34,20 @@
 #include <interfaces/ientityhandler.h>
 #include <interfaces/ipluginready.h>
 #include <interfaces/iactionsexporter.h>
+#include <interfaces/ipersistentstorageplugin.h>
 
 namespace LeechCraft
-{
-namespace Plugins
 {
 namespace SecMan
 {
 	class Plugin : public QObject
-					, public IInfo
-					, public IEntityHandler
-					, public IPluginReady
-					, public IActionsExporter
+				 , public IInfo
+				 , public IPluginReady
+				 , public IActionsExporter
+				 , public IPersistentStoragePlugin
 	{
 		Q_OBJECT
-		Q_INTERFACES (IInfo IEntityHandler IPluginReady IActionsExporter)
+		Q_INTERFACES (IInfo IPluginReady IActionsExporter IPersistentStoragePlugin)
 
 		QMap<QString, QList<QAction*>> MenuActions_;
 	public:
@@ -60,19 +59,17 @@ namespace SecMan
 		QString GetInfo () const;
 		QIcon GetIcon () const;
 
-		EntityTestHandleResult CouldHandle (const Entity&) const;
-		void Handle (Entity);
-
 		QSet<QByteArray> GetExpectedPluginClasses () const;
 		void AddPlugin (QObject*);
 
 		QList<QAction*> GetActions (ActionsEmbedPlace area) const;
 		QMap<QString, QList<QAction*>> GetMenuActions () const;
+
+		IPersistentStorage_ptr RequestStorage ();
 	private slots:
 		void handleDisplayContents ();
 	signals:
 		void gotActions (QList<QAction*>, LeechCraft::ActionsEmbedPlace);
 	};
-}
 }
 }

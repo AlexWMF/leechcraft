@@ -34,10 +34,9 @@
 #include <interfaces/entitytesthandleresult.h>
 #include "core.h"
 #include "contentsdisplaydialog.h"
+#include "persistentstorage.h"
 
 namespace LeechCraft
-{
-namespace Plugins
 {
 namespace SecMan
 {
@@ -84,18 +83,6 @@ namespace SecMan
 		return icon;
 	}
 
-	EntityTestHandleResult Plugin::CouldHandle (const Entity& e) const
-	{
-		return Core::Instance ().CouldHandle (e) ?
-				EntityTestHandleResult (EntityTestHandleResult::PIdeal) :
-				EntityTestHandleResult ();
-	}
-
-	void Plugin::Handle (Entity e)
-	{
-		Core::Instance ().Handle (e);
-	}
-
 	QSet<QByteArray> Plugin::GetExpectedPluginClasses () const
 	{
 		return Core::Instance ().GetExpectedPluginClasses ();
@@ -122,8 +109,12 @@ namespace SecMan
 		dia->setAttribute (Qt::WA_DeleteOnClose);
 		dia->show ();
 	}
-}
+
+	IPersistentStorage_ptr Plugin::RequestStorage ()
+	{
+		return std::make_shared<PersistentStorage> ();
+	}
 }
 }
 
-LC_EXPORT_PLUGIN (leechcraft_secman, LeechCraft::Plugins::SecMan::Plugin);
+LC_EXPORT_PLUGIN (leechcraft_secman, LeechCraft::SecMan::Plugin);

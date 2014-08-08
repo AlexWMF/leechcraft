@@ -34,8 +34,6 @@
 
 namespace LeechCraft
 {
-namespace Plugins
-{
 namespace SecMan
 {
 	class Core : public QObject
@@ -46,24 +44,17 @@ namespace SecMan
 	public:
 		static Core& Instance ();
 
-		bool CouldHandle (const Entity&) const;
-		void Handle (Entity);
 		QSet<QByteArray> GetExpectedPluginClasses () const;
 		void AddPlugin (QObject*);
 
 		QObjectList GetStoragePlugins () const;
+
+		void Store (const QByteArray&, const QVariant&);
+		QVariant Load (const QByteArray&);
 	private:
-		/** This one is called internally from AddPlugin, so it
-			* has no need to make sanity checks of the object.
-			*
-			* @param[in] object The storage plugin instance object.
-			*/
 		void AddStoragePlugin (QObject *object);
-		void Store (const QList<QByteArray>&, const QList<QVariantList>&, bool, bool);
-		QList<QVariantList> Load (const QList<QByteArray>&, bool);
 
 		QObject* GetStoragePlugin () const;
 	};
-}
 }
 }

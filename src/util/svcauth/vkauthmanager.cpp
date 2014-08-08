@@ -30,12 +30,14 @@
 #include "vkauthmanager.h"
 #include <QNetworkRequest>
 #include <QNetworkReply>
+#include <QNetworkCookie>
 #include <QtDebug>
 #include <QTimer>
 #include <QEvent>
 #include <QWebView>
 #include <util/network/customcookiejar.h>
 #include <util/sll/queuemanager.h>
+#include <util/sll/urloperator.h>
 
 namespace LeechCraft
 {
@@ -47,9 +49,10 @@ namespace SvcAuth
 	{
 		QUrl URLFromClientID (const QString& id, const QStringList& scope)
 		{
-			QUrl url = QUrl::fromEncoded ("https://oauth.vk.com/authorize?redirect_uri=http%3A%2F%2Foauth.vk.com%2Fblank.html&response_type=token&state=");
-			url.addQueryItem ("client_id", id);
-			url.addQueryItem ("scope", scope.join (","));
+			auto url = QUrl::fromEncoded ("https://oauth.vk.com/authorize?redirect_uri=http%3A%2F%2Foauth.vk.com%2Fblank.html&response_type=token&state=");
+			UrlOperator { url }
+					("client_id", id)
+					("scope", scope.join (","));
 			return url;
 		}
 	}
@@ -213,8 +216,14 @@ namespace SvcAuth
 			return false;
 
 		location = QUrl::fromEncoded (location.toEncoded ().replace ('#', '?'));
+#if QT_VERSION < 0x050000
 		Token_ = location.queryItemValue ("access_token");
 		ValidFor_ = location.queryItemValue ("expires_in").toInt ();
+#else
+		const QUrlQuery query { location };
+		Token_ = query.queryItemValue ("access_token");
+		ValidFor_ = query.queryItemValue ("expires_in").toInt ();
+#endif
 		ReceivedAt_ = QDateTime::currentDateTime ();
 		qDebug () << Q_FUNC_INFO << Token_ << ValidFor_;
 		IsRequesting_ = false;

@@ -30,9 +30,8 @@
 #pragma once
 
 #include <QWidget>
-#include <QNetworkProxy>
-#include <util/sll/regexp.h>
 #include "ui_proxiesconfigwidget.h"
+#include "structures.h"
 
 class QStandardItemModel;
 
@@ -40,46 +39,24 @@ namespace LeechCraft
 {
 namespace XProxy
 {
-	struct ReqTarget
-	{
-		Util::RegExp Host_;
-		int Port_;
-		QStringList Protocols_;
-	};
-	struct Proxy
-	{
-		QNetworkProxy::ProxyType Type_;
-		QString Host_;
-		int Port_;
-		QString User_;
-		QString Pass_;
-
-		operator QNetworkProxy () const;
-	};
-	typedef QPair<ReqTarget, Proxy> Entry_t;
-
-	QDataStream& operator<< (QDataStream&, const Proxy&);
-	QDataStream& operator>> (QDataStream&, Proxy&);
-	QDataStream& operator<< (QDataStream&, const ReqTarget&);
-	QDataStream& operator>> (QDataStream&, ReqTarget&);
+	class ProxiesStorage;
+	class ScriptsManager;
 
 	class ProxiesConfigWidget : public QWidget
 	{
 		Q_OBJECT
 
 		Ui::ProxiesConfigWidget Ui_;
-		QStandardItemModel *Model_;
 
-		QList<Entry_t> Entries_;
+		ProxiesStorage * const Storage_;
+		ScriptsManager * const ScriptsMgr_;
+
+		QStandardItemModel * const Model_;
+		QList<Proxy> Proxies_;
 	public:
-		ProxiesConfigWidget (QWidget* = 0);
-
-		QList<Proxy> FindMatching (const QString& reqHost, int reqPort,
-				const QString& proto = QString ()) const;
+		ProxiesConfigWidget (ProxiesStorage*, ScriptsManager*, QWidget* = 0);
 	private:
-		void LoadSettings ();
-		void SaveSettings () const;
-		Entry_t EntryFromUI () const;
+		Proxy EntryFromUI () const;
 	public slots:
 		void accept ();
 		void reject ();
@@ -88,6 +65,8 @@ namespace XProxy
 		void on_AddProxyButton__released ();
 		void on_UpdateProxyButton__released ();
 		void on_RemoveProxyButton__released ();
+		void on_EditUrlsButton__released ();
+		void on_EditListsButton__released ();
 	};
 }
 }

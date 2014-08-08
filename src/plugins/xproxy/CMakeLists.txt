@@ -14,9 +14,19 @@ set (SRCS
 	proxyfactory.cpp
 	xmlsettingsmanager.cpp
 	proxiesconfigwidget.cpp
+	proxiesstorage.cpp
+	structures.cpp
+	editurlsdialog.cpp
+	editurldialog.cpp
+	editlistsdialog.cpp
+	scriptsmanager.cpp
+	urllistscript.cpp
 	)
 set (FORMS
 	proxiesconfigwidget.ui
+	editurlsdialog.ui
+	editurldialog.ui
+	editlistsdialog.ui
 	)
 QT4_WRAP_UI (UIS_H ${FORMS})
 
@@ -34,3 +44,4 @@ target_link_libraries (leechcraft_xproxy
 	)
 install (TARGETS leechcraft_xproxy DESTINATION ${LC_PLUGINS_DEST})
 install (FILES xproxysettings.xml DESTINATION ${LC_SETTINGS_DEST})
+install (DIRECTORY share/scripts/xproxy DESTINATION ${LC_SCRIPTS_DEST})

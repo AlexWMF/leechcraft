@@ -44,12 +44,30 @@ namespace LeechCraft
 {
 namespace LMP
 {
+	namespace
+	{
+		QString GetConnName ()
+		{
+			auto cnt = 0;
+			const auto handleNum = Util::Handle2Num (QThread::currentThreadId ());
+			while (true)
+			{
+				const auto& name = QString ("LMP_LocalCollection_%1_%2")
+					.arg (cnt)
+					.arg (handleNum);
+				if (!QSqlDatabase::contains (name))
+					return name;
+
+				++cnt;
+			}
+
+			return {};
+		}
+	}
+
 	LocalCollectionStorage::LocalCollectionStorage (QObject *parent)
 	: QObject (parent)
-	, DB_ (QSqlDatabase::addDatabase ("QSQLITE",
-			QString ("LMP_LocalCollection_%1_%2")
-				.arg (qrand ())
-				.arg (Util::Handle2Num (QThread::currentThreadId ()))))
+	, DB_ (QSqlDatabase::addDatabase ("QSQLITE", GetConnName ()))
 	{
 		DB_.setDatabaseName (Util::CreateIfNotExists ("lmp").filePath ("localcollection.db"));
 
@@ -863,7 +881,9 @@ namespace LMP
 				}
 			}
 
-		if (XmlSettingsManager::Instance ().Property ("TracksTableVersion", 1).toInt () < 2)
+		const auto tracksTableVersion = XmlSettingsManager::Instance ()
+				.Property ("TracksTableVersion", 1).toInt ();
+		if (tracksTableVersion < 2)
 		{
 			const QString query = "CREATE TABLE tracks2 ("
 				"Id INTEGER PRIMARY KEY AUTOINCREMENT, "

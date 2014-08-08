@@ -33,6 +33,9 @@
 #include <QInputDialog>
 #include <util/xpc/util.h>
 #include "interfaces/structures.h"
+#include <interfaces/core/ientitymanager.h>
+#include <interfaces/core/ipluginsmanager.h>
+#include <interfaces/ipersistentstorageplugin.h>
 
 namespace LeechCraft
 {
@@ -40,43 +43,43 @@ namespace Util
 {
 	namespace
 	{
-		QString GetPasswordHelper (const QString& key, QObject *emitter)
+		QString GetPasswordHelper (const QByteArray& key, const ICoreProxy_ptr& proxy)
 		{
-			QList<QVariant> keys;
-			keys << key;
-			const auto& result = Util::GetPersistentData (keys, emitter);
-			if (result.size () != 1)
+			const auto& result = Util::GetPersistentData (key, proxy);
+			if (!result.isValid ())
 			{
 				qWarning () << Q_FUNC_INFO
-						<< "incorrect result size for key"
-						<< key
-						<< "; result:"
-						<< result;
-				return QString ();
+						<< "invalid result for key"
+						<< key;
+				return {};
 			}
 
-			const auto& strVarList = result.at (0).toList ();
-			if (strVarList.isEmpty () ||
-					!strVarList.at (0).canConvert<QString> ())
+			switch (result.type ())
 			{
+			case QVariant::String:
+				return result.toString ();
+			case QVariant::List:
+				return result.toList ().value (0).toString ();
+			case QVariant::StringList:
+				return result.toStringList ().value (0);
+			default:
 				qWarning () << Q_FUNC_INFO
-						<< "invalid string variant list"
-						<< strVarList
+						<< "unknown result type"
+						<< result.type ()
+						<< result
 						<< "for key"
 						<< key;
-				return QString ();
+				return {};
 			}
-
-			return strVarList.at (0).toString ();
 		}
 	}
 
 	QString GetPassword (const QString& key, const QString& diaText,
-			QObject *emitter, bool useStored)
+			const ICoreProxy_ptr& proxy, bool useStored)
 	{
 		if (useStored)
 		{
-			const QString& result = GetPasswordHelper (key, emitter);
+			const auto& result = GetPasswordHelper (key.toUtf8 (), proxy);
 			if (!result.isNull ())
 				return result;
 		}
@@ -86,29 +89,18 @@ namespace Util
 				diaText,
 				QLineEdit::Password);
 		if (!result.isNull ())
-			SavePassword (result, key, emitter);
+			SavePassword (result, key, proxy);
 		return result;
 	}
 
 	void SavePassword (const QString& password, const QString& key,
-			QObject *emitter)
+			const ICoreProxy_ptr& proxy)
 	{
-		QList<QVariant> keys;
-		keys << key;
-
-		QList<QVariant> passwordVar;
-		passwordVar << password;
-		QList<QVariant> values;
-		values << QVariant (passwordVar);
-
-		Entity e = Util::MakeEntity (keys,
-				QString (),
-				Internal,
-				"x-leechcraft/data-persistent-save");
-		e.Additional_ ["Values"] = values;
-		e.Additional_ ["Overwrite"] = true;
-
-		QMetaObject::invokeMethod (emitter, "gotEntity", Q_ARG (LeechCraft::Entity, e));
+		const auto& plugins = proxy->GetPluginsManager ()->
+				GetAllCastableTo<IPersistentStoragePlugin*> ();
+		for (const auto plugin : plugins)
+			if (const auto& storage = plugin->RequestStorage ())
+				storage->Set (key.toUtf8 (), password);
 	}
 }
 }

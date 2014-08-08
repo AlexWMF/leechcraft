@@ -33,11 +33,7 @@
 
 namespace LeechCraft
 {
-namespace Plugins
-{
 namespace SecMan
-{
-namespace StoragePlugins
 {
 namespace SecureStorage
 {
@@ -45,26 +41,23 @@ namespace SecureStorage
 	{
 		Util::BaseSettingsManager::Init ();
 	}
-	
+
 	XmlSettingsManager* XmlSettingsManager::Instance ()
 	{
 		static XmlSettingsManager manager;
 		return &manager;
 	}
-	
+
 	QSettings* XmlSettingsManager::BeginSettings () const
 	{
-		QSettings *settings =
-			new QSettings (QCoreApplication::organizationName (),
-					QCoreApplication::applicationName () + "_SecureStorage");
+		auto settings = new QSettings (QCoreApplication::organizationName (),
+					QCoreApplication::applicationName () + "_SecMan_SecureStorage");
 		return settings;
 	}
-	
+
 	void XmlSettingsManager::EndSettings (QSettings*) const
 	{
 	}
-}
-}
 }
 }
 }

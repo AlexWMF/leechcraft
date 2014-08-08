@@ -66,15 +66,10 @@ namespace
 
 namespace LeechCraft
 {
-namespace Plugins
-{
 namespace SecMan
-{
-namespace StoragePlugins
 {
 namespace SecureStorage
 {
-
 	QString ReturnIfEqual (const QString& s1, const QString& s2)
 	{
 		if (s1 == s2)
@@ -84,22 +79,20 @@ namespace SecureStorage
 	}
 
 	Plugin::Plugin ()
-	: WindowTitle_ ("SecMan SecureStorage")
-	, CryptoSystem_ (0)
+	: Storage_ { std::make_shared<QSettings> (QSettings::IniFormat,
+					QSettings::UserScope,
+					QCoreApplication::organizationName (),
+					QCoreApplication::applicationName () + "_SecMan_SecureStorage_Data")}
+	, Settings_ { std::make_shared<QSettings> (QSettings::IniFormat,
+					QSettings::UserScope,
+					QCoreApplication::organizationName (),
+					QCoreApplication::applicationName () + "_SecMan_SecureStorage") }
+	, WindowTitle_ { "SecMan SecureStorage" }
 	{
 	}
 
 	void Plugin::Init (ICoreProxy_ptr)
 	{
-		Settings_ .reset (new QSettings (QSettings::IniFormat,
-					QSettings::UserScope,
-					QCoreApplication::organizationName (),
-					QCoreApplication::applicationName () + "_SecMan_SecureStorage"));
-		Storage_ .reset (new QSettings (QSettings::IniFormat,
-					QSettings::UserScope,
-					QCoreApplication::organizationName (),
-					QCoreApplication::applicationName () + "_SecMan_SecureStorage_Data"));
-
 		ForgetKeyAction_ = new QAction (tr ("Forget master password"), this);
 		connect (ForgetKeyAction_,
 				SIGNAL (triggered ()),
@@ -189,22 +182,17 @@ namespace SecureStorage
 	QList<QByteArray> Plugin::ListKeys (IStoragePlugin::StorageType)
 	{
 		QList<QByteArray> result;
-		Q_FOREACH (const QString& key, Storage_->allKeys ())
+		for (const auto& key : Storage_->allKeys ())
 			result << key.toUtf8 ();
 		return result;
 	}
 
-	void Plugin::Save (const QByteArray& key, const QVariantList& values,
-			IStoragePlugin::StorageType st, bool overwrite)
+	void Plugin::Save (const QByteArray& key, const QVariant& value, IStoragePlugin::StorageType)
 	{
-		QVariantList allValues = values;
-		if (!overwrite)
-			allValues.prepend (Load (key, st));
-
+		const auto& data = Serialize (value);
 		try
 		{
-			const QByteArray& data = Serialize (allValues);
-			const QByteArray& encrypted = GetCryptoSystem ().Encrypt (data);
+			const auto& encrypted = GetCryptoSystem ().Encrypt (data);
 			Storage_->setValue (key, encrypted);
 		}
 		catch (const PasswordNotEnteredException&)
@@ -218,38 +206,25 @@ namespace SecureStorage
 		}
 	}
 
-	QVariantList Plugin::Load (const QByteArray& key, IStoragePlugin::StorageType)
+	QVariant Plugin::Load (const QByteArray& key, IStoragePlugin::StorageType)
 	{
+		const auto& encrypted = Storage_->value (key).toByteArray ();
+		if (encrypted.isEmpty ())
+			return {};
+
 		try
 		{
-			const QByteArray& encrypted = Storage_->value (key).toByteArray ();
-			const QByteArray& data = GetCryptoSystem ().Decrypt (encrypted);
-			return Deserialize (data).toList ();
+			const auto& data = GetCryptoSystem ().Decrypt (encrypted);
+			return Deserialize (data);
 		}
 		catch (const WrongHMACException&)
 		{
-			return QVariantList ();
+			return {};
 		}
 		catch (const PasswordNotEnteredException&)
 		{
-			return QVariantList ();
+			return {};
 		}
-	}
-
-	void Plugin::Save (const QList<QPair<QByteArray, QVariantList>>& keyValues,
-			IStoragePlugin::StorageType st, bool overwrite)
-	{
-		QPair<QByteArray, QVariantList> keyValue;
-		Q_FOREACH (keyValue, keyValues)
-			Save (keyValue.first, keyValue.second, st, overwrite);
-	}
-
-	QList<QVariantList> Plugin::Load (const QList<QByteArray>& keys, IStoragePlugin::StorageType st)
-	{
-		QList<QVariantList> result;
-		Q_FOREACH (const QByteArray& key, keys)
-			result << Load (key, st);
-		return result;
 	}
 
 	void Plugin::forgetKey ()
@@ -324,55 +299,42 @@ namespace SecureStorage
 		if (!CryptoSystem_)
 		{
 			if (IsPasswordEmpty ())
-				SetCryptoSystem (new CryptoSystem (""));
+				SetCryptoSystem (std::make_shared<CryptoSystem> (""));
 			else
 			{
 				while (true)
 				{
 					// This method can be called recursively from loop.exec() below,
 					// but we should display only one password dialog.
-					if (!InputPasswordDialog_->isVisible ())
+					if (InputPasswordDialog_->isVisible ())
 					{
-						InputPasswordDialog_->setTextEchoMode (QLineEdit::Password);
-						InputPasswordDialog_->setWindowTitle (WindowTitle_);
-						InputPasswordDialog_->setLabelText (tr ("Enter master password:"));
-						InputPasswordDialog_->setTextValue (QString ());
-						InputPasswordDialog_->setVisible (true);
+						QEventLoop loop;
+						connect (InputPasswordDialog_.get (),
+								SIGNAL (done (int)),
+								&loop,
+								SLOT (quit ()),
+								Qt::QueuedConnection);
+						loop.exec ();
 					}
-
-					QEventLoop loop;
-					connect (InputPasswordDialog_.get (),
-						SIGNAL (accepted ()),
-						&loop,
-						SLOT (quit ()),
-						Qt::QueuedConnection);
-					connect (InputPasswordDialog_.get (),
-						SIGNAL (rejected ()),
-						&loop,
-						SLOT (quit ()),
-						Qt::QueuedConnection);
-					// qDebug () << Q_FUNC_INFO << "Loop start";
-					loop.exec ();
-					// qDebug () << Q_FUNC_INFO << "Loop exit";
 
 					if (CryptoSystem_)
 						break;
 
-					if (InputPasswordDialog_->result () != QDialog::Accepted)
+					InputPasswordDialog_->setTextEchoMode (QLineEdit::Password);
+					InputPasswordDialog_->setWindowTitle (WindowTitle_);
+					InputPasswordDialog_->setLabelText (tr ("Enter master password:"));
+					InputPasswordDialog_->setTextValue ({});
+					InputPasswordDialog_->setVisible (true);
+
+					if (InputPasswordDialog_->exec () != QDialog::Accepted)
 						throw PasswordNotEnteredException ();
 
-					QString password = InputPasswordDialog_->textValue ();
-					CryptoSystem *cs = new CryptoSystem (password);
+					const auto& password = InputPasswordDialog_->textValue ();
+					const auto& cs = std::make_shared<CryptoSystem> (password);
 					if (IsPasswordCorrect (*cs))
 					{
 						SetCryptoSystem (cs);
 						break;
-					}
-					else // continue
-					{
-						delete cs;
-						InputPasswordDialog_->setLabelText (tr ("Wrong password.\n"
-								"Try enter master password again:"));
 					}
 				}
 			}
@@ -381,33 +343,22 @@ namespace SecureStorage
 		return *CryptoSystem_;
 	}
 
-	void Plugin::SetCryptoSystem (CryptoSystem *cs)
+	void Plugin::SetCryptoSystem (const CryptoSystem_ptr& cs)
 	{
-		delete CryptoSystem_;
 		CryptoSystem_ = cs;
 		UpdateActionsStates ();
 	}
 
 	void Plugin::CreateNewPassword ()
 	{
-		if (!NewPasswordDialog_->isVisible ())
-		{
-			NewPasswordDialog_->clear ();
-			NewPasswordDialog_->show ();
-		}
-		QEventLoop loop;
-		connect (NewPasswordDialog_.get (),
-			SIGNAL (dialogFinished ()),
-			&loop,
-			SLOT (quit ()),
-			Qt::QueuedConnection);
-		// qDebug () << Q_FUNC_INFO << "Loop start";
-		loop.exec ();
-		// qDebug () << Q_FUNC_INFO << "Loop exit";
+		if (NewPasswordDialog_->isVisible ())
+			return;
 
-		QString password = NewPasswordDialog_->GetPassword ();
+		NewPasswordDialog_->clear ();
+		if (NewPasswordDialog_->exec () != QDialog::Accepted)
+			return;
 
-		// check result of recursive calls of this method through loop.exec().
+		const auto& password = NewPasswordDialog_->GetPassword ();
 		if (!IsPasswordSet ())
 		{
 			// clear old settings and data
@@ -418,7 +369,7 @@ namespace SecureStorage
 			UpdatePasswordSettings (password);
 			UpdateActionsStates ();
 		}
-}
+	}
 
 	bool Plugin::IsPasswordSet ()
 	{
@@ -436,13 +387,13 @@ namespace SecureStorage
 
 		CryptoSystem newCs (newPass);
 
-		Q_FOREACH (const QString& key, Storage_->allKeys ())
+		for (const auto& key : Storage_->allKeys ())
 		{
 			try
 			{
-				const QByteArray& oldEncrypted = Storage_->value (key).toByteArray ();
-				const QByteArray& data = oldCs.Decrypt (oldEncrypted);
-				const QByteArray& newEncrypted = newCs.Encrypt (data);
+				const auto& oldEncrypted = Storage_->value (key).toByteArray ();
+				const auto& data = oldCs.Decrypt (oldEncrypted);
+				const auto& newEncrypted = newCs.Encrypt (data);
 				QVariant encryptedData (newEncrypted);
 				Storage_->setValue (key, encryptedData);
 			}
@@ -460,12 +411,12 @@ namespace SecureStorage
 
 	void Plugin::UpdatePasswordSettings (const QString& pass)
 	{
-		CryptoSystem *cs = new CryptoSystem (pass);
+		const auto& cs = std::make_shared<CryptoSystem> (pass);
 
 		// set up new settings
 		Settings_->setValue ("SecureStoragePasswordIsSet", true);
 		Settings_->setValue ("SecureStoragePasswordIsEmpty", pass.isEmpty ());
-		const QByteArray& cookie = cs->Encrypt (QByteArray ("cookie"));
+		const QByteArray& cookie = cs->Encrypt ("cookie");
 		Settings_->setValue ("SecureStorageCookie", cookie);
 
 		// use created cryptosystem.
@@ -494,14 +445,12 @@ namespace SecureStorage
 		return Settings_->value ("SecureStoragePasswordIsEmpty").toBool ();
 	}
 
-	LeechCraft::Util::XmlSettingsDialog_ptr Plugin::GetSettingsDialog () const
+	Util::XmlSettingsDialog_ptr Plugin::GetSettingsDialog () const
 	{
 		return XmlSettingsDialog_;
 	}
 }
 }
 }
-}
-}
 
-LC_EXPORT_PLUGIN (leechcraft_secman_securestorage, LeechCraft::Plugins::SecMan::StoragePlugins::SecureStorage::Plugin);
+LC_EXPORT_PLUGIN (leechcraft_secman_securestorage, LeechCraft::SecMan::SecureStorage::Plugin);

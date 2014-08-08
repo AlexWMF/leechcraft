@@ -30,18 +30,17 @@
 #include "proxiesconfigwidget.h"
 #include <QStandardItemModel>
 #include <QSettings>
-
-Q_DECLARE_METATYPE (QList<LeechCraft::XProxy::Entry_t>);
+#include <util/sll/slotclosure.h>
+#include "proxiesstorage.h"
+#include "editurlsdialog.h"
+#include "editlistsdialog.h"
+#include "scriptsmanager.h"
+#include "proxiesstorage.h"
 
 namespace LeechCraft
 {
 namespace XProxy
 {
-	Proxy::operator QNetworkProxy () const
-	{
-		return QNetworkProxy (Type_, Host_, Port_, User_, Pass_);
-	}
-
 	namespace
 	{
 		QString ProxyType2Str (QNetworkProxy::ProxyType type)
@@ -69,33 +68,21 @@ namespace XProxy
 			}
 		}
 
-		QList<QStandardItem*> Entry2Row (const Entry_t& entry)
+		QList<QStandardItem*> Proxy2Row (const Proxy& proxy)
 		{
 			QList<QStandardItem*> row;
-
-			const auto& req = entry.first;
-			if (req.Protocols_.isEmpty ())
-				row << new QStandardItem (ProxiesConfigWidget::tr ("any"));
-			else
-				row << new QStandardItem (req.Protocols_.join ("; "));
-			const QString& targetStr = req.Host_.GetPattern () +
-					":" +
-					(req.Port_ > 0 ?
-							QString::number (req.Port_) :
-							ProxiesConfigWidget::tr ("any"));
-			row << new QStandardItem (targetStr);
-
-			const auto& proxy = entry.second;
 			row << new QStandardItem (ProxyType2Str (proxy.Type_));
 			row << new QStandardItem (proxy.Host_ + ":" + QString::number (proxy.Port_));
 			row << new QStandardItem (proxy.User_);
-
 			return row;
 		}
 	}
 
-	ProxiesConfigWidget::ProxiesConfigWidget (QWidget *parent)
+	ProxiesConfigWidget::ProxiesConfigWidget (ProxiesStorage *storage,
+			ScriptsManager *manager, QWidget *parent)
 	: QWidget (parent)
+	, Storage_ (storage)
+	, ScriptsMgr_ (manager)
 	, Model_ (new QStandardItemModel (this))
 	{
 		Ui_.setupUi (this);
@@ -106,97 +93,37 @@ namespace XProxy
 				this,
 				SLOT (handleItemSelected (QModelIndex)));
 
+		const QStringList labels
+		{
+			tr ("Proxy type"),
+			tr ("Proxy target"),
+			tr ("User")
+		};
+		Model_->setHorizontalHeaderLabels (labels);
+
 		reject ();
 	}
 
-	QList<Proxy> ProxiesConfigWidget::FindMatching (const QString& reqHost, int reqPort, const QString& proto) const
+	Proxy ProxiesConfigWidget::EntryFromUI () const
 	{
-		static const std::map<QString, int> proto2port =
-		{
-			{ "http", 80 },
-			{ "https", 443 }
-		};
-
-		if (reqPort < 0 && !proto.isEmpty ())
-		{
-			const auto pos = proto2port.find (proto.toLower ());
-			if (pos != proto2port.end ())
-				reqPort = pos->second;
-		}
-
-		QList<Proxy> result;
-		for (const auto& pair : Entries_)
-		{
-			const auto& target = pair.first;
-			if (target.Port_ && reqPort > 0 && target.Port_ != reqPort)
-				continue;
-
-			if (!target.Protocols_.isEmpty () && !target.Protocols_.contains (proto))
-				continue;
-
-			if (!target.Host_.Matches (reqHost))
-				continue;
-
-			result << pair.second;
-		}
-		return result;
-	}
-
-	void ProxiesConfigWidget::LoadSettings ()
-	{
-		QSettings settings (QCoreApplication::organizationName (),
-				QCoreApplication::applicationName () + "_XProxy");
-		settings.beginGroup ("SavedProxies");
-		Entries_ = settings.value ("Entries").value<decltype (Entries_)> ();
-		settings.endGroup ();
-
-		Q_FOREACH (const auto& entry, Entries_)
-			Model_->appendRow (Entry2Row (entry));
-	}
-
-	void ProxiesConfigWidget::SaveSettings () const
-	{
-		QSettings settings (QCoreApplication::organizationName (),
-				QCoreApplication::applicationName () + "_XProxy");
-		settings.beginGroup ("SavedProxies");
-		settings.setValue ("Entries", QVariant::fromValue<decltype (Entries_)> (Entries_));
-		settings.endGroup ();
-	}
-
-	Entry_t ProxiesConfigWidget::EntryFromUI () const
-	{
-		QString rxPat = Ui_.TargetHost_->text ();
-		if (!rxPat.contains ("*") && !rxPat.contains ("^") && !rxPat.contains ("$"))
-		{
-			rxPat.prepend (".*");
-			rxPat.append (".*");
-		}
-
-		ReqTarget targ
-		{
-			{ rxPat, Qt::CaseInsensitive },
-			Ui_.TargetPort_->value (),
-			Ui_.TargetProto_->text ().split (' ', QString::SkipEmptyParts)
-		};
-
-		QNetworkProxy::ProxyType type = QNetworkProxy::ProxyType::NoProxy;
+		auto type = QNetworkProxy::ProxyType::NoProxy;
 		switch (Ui_.ProxyType_->currentIndex ())
 		{
-			case 0:
-				type = QNetworkProxy::ProxyType::Socks5Proxy;
-				break;
-			case 1:
-				type = QNetworkProxy::ProxyType::HttpProxy;
-				break;
-			case 2:
-				type = QNetworkProxy::ProxyType::HttpCachingProxy;
-				break;
-			case 3:
-				type = QNetworkProxy::ProxyType::FtpCachingProxy;
-				break;
-			case 4:
-				type = QNetworkProxy::ProxyType::NoProxy;
-				break;
+		case 0:
+			type = QNetworkProxy::ProxyType::Socks5Proxy;
+			break;
+		case 1:
+			type = QNetworkProxy::ProxyType::HttpProxy;
+			break;
+		case 2:
+			type = QNetworkProxy::ProxyType::HttpCachingProxy;
+			break;
+		case 3:
+			type = QNetworkProxy::ProxyType::FtpCachingProxy;
+			break;
+		case 4:
+			type = QNetworkProxy::ProxyType::NoProxy;
+			break;
 		}
 		Proxy proxy =
 		{
@@ -207,44 +134,39 @@ namespace XProxy
 			Ui_.ProxyPassword_->text ()
 		};
 
-		return qMakePair (targ, proxy);
+		return proxy;
 	}
 
 	void ProxiesConfigWidget::accept ()
 	{
-		SaveSettings ();
+		Storage_->SaveSettings ();
 	}
 
 	void ProxiesConfigWidget::reject ()
 	{
-		Model_->clear ();
+		if (const auto rc = Model_->rowCount ())
+			Model_->removeRows (0, rc);
 
-		QStringList labels;
-		labels << tr ("Protocols")
-				<< tr ("Target")
-				<< tr ("Proxy type")
-				<< tr ("Proxy target")
-				<< tr ("User");
-		Model_->setHorizontalHeaderLabels (labels);
+		Storage_->LoadSettings ();
 
-		LoadSettings ();
+		Proxies_ = Storage_->GetKnownProxies ();
+		for (const auto& proxy : Proxies_)
+			Model_->appendRow (Proxy2Row (proxy));
 	}
 
 	void ProxiesConfigWidget::handleItemSelected (const QModelIndex& idx)
 	{
 		Ui_.UpdateProxyButton_->setEnabled (idx.isValid ());
 		Ui_.RemoveProxyButton_->setEnabled (idx.isValid ());
+		Ui_.EditUrlsButton_->setEnabled (idx.isValid ());
+		Ui_.EditListsButton_->setEnabled (idx.isValid ());
 
-		const auto& entry = Entries_.value (idx.row ());
-		Ui_.TargetHost_->setText (entry.first.Host_.GetPattern ());
-		Ui_.TargetPort_->setValue (entry.first.Port_);
-		Ui_.TargetProto_->setText (entry.first.Protocols_.join (" "));
-
-		Ui_.ProxyHost_->setText (entry.second.Host_);
-		Ui_.ProxyPort_->setValue (entry.second.Port_);
-		Ui_.ProxyUser_->setText (entry.second.User_);
-		Ui_.ProxyPassword_->setText (entry.second.Pass_);
-		switch (entry.second.Type_)
+		const auto& proxy = Proxies_.value (idx.row ());
+		Ui_.ProxyHost_->setText (proxy.Host_);
+		Ui_.ProxyPort_->setValue (proxy.Port_);
+		Ui_.ProxyUser_->setText (proxy.User_);
+		Ui_.ProxyPassword_->setText (proxy.Pass_);
+		switch (proxy.Type_)
 		{
 		case QNetworkProxy::ProxyType::Socks5Proxy:
 			Ui_.ProxyType_->setCurrentIndex (0);
@@ -264,107 +186,86 @@ namespace XProxy
 		default:
 			qWarning () << Q_FUNC_INFO
 					<< "unknown proxy type"
-					<< entry.second.Type_;
+					<< proxy.Type_;
 			break;
 		}
 	}
 
 	void ProxiesConfigWidget::on_AddProxyButton__released ()
 	{
-		const auto& entry = EntryFromUI ();
-		Entries_ << entry;
-		Model_->appendRow (Entry2Row (entry));
+		const auto& proxy = EntryFromUI ();
+		Proxies_ << proxy;
+		Model_->appendRow (Proxy2Row (proxy));
+
+		Storage_->AddProxy (proxy);
 	}
 
 	void ProxiesConfigWidget::on_UpdateProxyButton__released ()
 	{
 		const int row = Ui_.ProxiesList_->currentIndex ().row ();
-		if (row < 0 || row >= Entries_.size ())
+		if (row < 0 || row >= Proxies_.size ())
 			return;
 
-		const auto& entry = EntryFromUI ();
-		Entries_ [row] = entry;
+		const auto& oldProxy = Proxies_.at (row);
+
+		const auto& proxy = EntryFromUI ();
+		Proxies_ [row] = proxy;
 		Model_->removeRow (row);
-		Model_->insertRow (row, Entry2Row (entry));
+		Model_->insertRow (row, Proxy2Row (proxy));
+
+		Storage_->UpdateProxy (oldProxy, proxy);
 	}
 
 	void ProxiesConfigWidget::on_RemoveProxyButton__released ()
 	{
 		const int row = Ui_.ProxiesList_->currentIndex ().row ();
-		if (row < 0 || row >= Entries_.size ())
+		if (row < 0 || row >= Proxies_.size ())
 			return;
 
-		Entries_.removeAt (row);
 		Model_->removeRow (row);
+		Storage_->RemoveProxy (Proxies_.takeAt (row));
 	}
 
-	QDataStream& operator<< (QDataStream& out, const Proxy& p)
+	void ProxiesConfigWidget::on_EditUrlsButton__released ()
 	{
-		out << static_cast<quint8> (1);
-		out << static_cast<qint8> (p.Type_)
-			<< p.Host_
-			<< p.Port_
-			<< p.User_
-			<< p.Pass_;
-		return out;
-	}
+		const int row = Ui_.ProxiesList_->currentIndex ().row ();
+		if (row < 0 || row >= Proxies_.size ())
+			return;
 
-	QDataStream& operator>> (QDataStream& in, Proxy& p)
-	{
-		quint8 ver = 0;
-		in >> ver;
-		if (ver != 1)
+		const auto& proxy = Proxies_.value (row);
+		auto dialog = new EditUrlsDialog { Storage_->GetTargets (proxy), this };
+		dialog->setAttribute (Qt::WA_DeleteOnClose);
+
+		new Util::SlotClosure<Util::DeleteLaterPolicy>
 		{
-			qWarning () << Q_FUNC_INFO
-					<< "unknown version"
-					<< ver;
-			return in;
-		}
+			[this, proxy, dialog] { Storage_->SetTargets (proxy, dialog->GetTargets ()); },
+			dialog,
+			SIGNAL (accepted ()),
+			dialog
+		};
 
-		qint8 type = 0;
-		in >> type
-			>> p.Host_
-			>> p.Port_
-			>> p.User_
-			>> p.Pass_;
-		p.Type_ = static_cast<QNetworkProxy::ProxyType> (type);
-
-		return in;
+		dialog->show ();
 	}
 
-	QDataStream& operator<< (QDataStream& out, const ReqTarget& t)
+	void ProxiesConfigWidget::on_EditListsButton__released ()
 	{
-		out << static_cast<quint8> (2);
-		out << t.Host_
-			<< t.Port_
-			<< t.Protocols_;
-		return out;
-	}
+		const int row = Ui_.ProxiesList_->currentIndex ().row ();
+		if (row < 0 || row >= Proxies_.size ())
+			return;
 
-	QDataStream& operator>> (QDataStream& in, ReqTarget& t)
-	{
-		quint8 ver = 0;
-		in >> ver;
-		if (ver < 1 || ver > 2)
+		const auto& proxy = Proxies_.value (row);
+		auto dialog = new EditListsDialog { Storage_->GetScripts (proxy), ScriptsMgr_, this };
+		dialog->setAttribute (Qt::WA_DeleteOnClose);
+
+		new Util::SlotClosure<Util::DeleteLaterPolicy>
 		{
-			qWarning () << Q_FUNC_INFO
-					<< "unknown version"
-					<< ver;
-			return in;
-		}
+			[this, proxy, dialog] { Storage_->SetScripts (proxy, dialog->GetScripts ()); },
+			dialog,
+			SIGNAL (accepted ()),
+			dialog
+		};
 
-		if (ver == 1)
-		{
-			QRegExp rx;
-			in >> rx;
-			t.Host_ = Util::RegExp { rx.pattern (), rx.caseSensitivity () };
-		}
-		else
-			in >> t.Host_;
-
-		in >> t.Port_
-			>> t.Protocols_;
-		return in;
+		dialog->show ();
 	}
 }
 }

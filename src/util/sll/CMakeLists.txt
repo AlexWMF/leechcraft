@@ -4,6 +4,7 @@ set (SLL_SRCS
 	queuemanager.cpp
 	regexp.cpp
 	slotclosure.cpp
+	urloperator.cpp
 	)
 
 option (WITH_PCRE "Use PCRE regular expression engine for instead of Qt's one (recommended since QRegExps are slow)." ON)
@@ -37,3 +38,5 @@ target_link_libraries (leechcraft-util-sll
 	)
 set_property (TARGET leechcraft-util-sll PROPERTY SOVERSION ${LC_SOVERSION})
 install (TARGETS leechcraft-util-sll DESTINATION ${LIBDIR})
+
+FindQtLibs (leechcraft-util-sll Core)

@@ -35,8 +35,6 @@
 
 namespace LeechCraft
 {
-namespace Plugins
-{
 namespace SecMan
 {
 	namespace
@@ -91,6 +89,7 @@ namespace SecMan
 			return result;
 		};
 
+		/*
 		for (auto pluginObj : Core::Instance ().GetStoragePlugins ())
 		{
 			auto ii = qobject_cast<IInfo*> (pluginObj);
@@ -113,9 +112,9 @@ namespace SecMan
 
 			ContentsModel_->appendRow (pluginItems);
 		}
+		*/
 
 		Ui_.ContentsTree_->expandAll ();
 	}
-}
 }
 }
